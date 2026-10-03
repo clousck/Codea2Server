@@ -1,0 +1,12 @@
+services:
+  json-uploader:
+    build: ./json-uploader
+    container_name: json-uploader
+    restart: unless-stopped
+    ports:
+      - "8090:8080"          # ← lo que falta
+    environment:
+      - UPLOAD_API_KEY=CodeaVR2YachayTech2026
+    volumes:
+      - ./uploads:/data/uploads
+

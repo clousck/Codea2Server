@@ -1,0 +1,176 @@
+﻿{
+    "pin": "0000",
+    "sessionId": 4,
+    "difficulty": 1,
+    "startedUtc": "2026-09-22T10:47:29.1802330Z",
+    "endedUtc": "2026-09-22T10:53:31.7895900Z",
+    "escenario1": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 19.684188842773439,
+        "startedUtc": "2026-09-22T10:49:14.3187830Z",
+        "endedUtc": "2026-09-22T10:49:34.0087510Z",
+        "failedAttempts": 0,
+        "blocksGrabbed": 10,
+        "blocksReleased": 9,
+        "errorCollisionBot": 0,
+        "errorIncompleteSequence": 0,
+        "errorInvalidCommand": 0,
+        "attempts": [
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Avanzar",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Izquierda",
+                    "Avanzar",
+                    "Usar"
+                ],
+                "solved": 1,
+                "durationSeconds": 15.440658569335938,
+                "timestamp": "2026-09-22T10:49:29.7566250Z"
+            }
+        ]
+    },
+    "escenario2": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 23.967422485351564,
+        "startedUtc": "2026-09-22T10:50:21.7064090Z",
+        "endedUtc": "2026-09-22T10:50:45.6730260Z",
+        "wrongSelections": 0,
+        "selections": [
+            {
+                "module": "enfriamiento",
+                "option": "Agregar agua",
+                "selected": 1,
+                "correct": 1,
+                "timestamp": "2026-09-22T10:50:29.9445330Z"
+            },
+            {
+                "module": "generadores",
+                "option": "Conectar una batería cargada",
+                "selected": 1,
+                "correct": 1,
+                "timestamp": "2026-09-22T10:50:38.6669950Z"
+            },
+            {
+                "module": "motores",
+                "option": "Agregar gasolina",
+                "selected": 1,
+                "correct": 1,
+                "timestamp": "2026-09-22T10:50:45.6719310Z"
+            }
+        ]
+    },
+    "escenario3": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 55.65240478515625,
+        "startedUtc": "2026-09-22T10:51:34.3867760Z",
+        "endedUtc": "2026-09-22T10:52:30.0410440Z",
+        "failedAttempts": 1,
+        "blocksGrabbed": 3,
+        "blocksReleased": 3,
+        "errorCollisionBot": 0,
+        "errorIncompleteSequence": 0,
+        "errorInvalidCommand": 5,
+        "attempts": [
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 1,
+                "itemType": "",
+                "solved": 0,
+                "durationSeconds": 3.6437835693359377,
+                "timestamp": "2026-09-22T10:51:38.0304460Z"
+            },
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 7,
+                "itemType": "",
+                "solved": 0,
+                "durationSeconds": 14.138290405273438,
+                "timestamp": "2026-09-22T10:51:52.2637990Z"
+            },
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 2,
+                "itemType": "",
+                "solved": 0,
+                "durationSeconds": 28.420440673828126,
+                "timestamp": "2026-09-22T10:52:20.6847370Z"
+            },
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 2,
+                "itemType": "",
+                "solved": 1,
+                "durationSeconds": 7.825103759765625,
+                "timestamp": "2026-09-22T10:52:28.5098550Z"
+            }
+        ]
+    },
+    "escenario4": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 13.068206787109375,
+        "startedUtc": "2026-09-22T10:53:09.3766270Z",
+        "endedUtc": "2026-09-22T10:53:22.4440770Z",
+        "wrongPlacements": 0,
+        "chipsGrabbed": 5,
+        "chipsReleased": 5,
+        "placements": [
+            {
+                "socket": "symbols_26",
+                "chip": "symbols_26",
+                "correct": 1,
+                "timestamp": "2026-09-22T10:53:10.5168090Z"
+            },
+            {
+                "socket": "symbols_25",
+                "chip": "symbols_25",
+                "correct": 1,
+                "timestamp": "2026-09-22T10:53:16.5361940Z"
+            },
+            {
+                "socket": "symbols_31",
+                "chip": "symbols_31",
+                "correct": 1,
+                "timestamp": "2026-09-22T10:53:18.3721570Z"
+            },
+            {
+                "socket": "symbols_27",
+                "chip": "symbols_27",
+                "correct": 1,
+                "timestamp": "2026-09-22T10:53:22.4427620Z"
+            }
+        ]
+    }
+}
