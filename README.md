@@ -145,6 +145,11 @@ perder datos nunca:
 
 Dentro de `uploads/` el panel solo escribe eso y `.codea2-panel.json` (sesiones excluidas y notas).
 
+> **No quitar del repositorio los JSON de `uploads/` que ya están versionados.** Un
+> `git rm --cached` haría que el siguiente `git pull` los borrase de la Pi. Los que lleguen
+> después no hace falta añadirlos: la copia de seguridad se descarga desde el panel
+> (*Archivos → Descargar todos*).
+
 ## Si algo falla
 
 - **502 en Cloudflare con el servidor vivo:** el túnel no apunta a `raspberrypi:26332`, o falta
