@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
+{% set active = 'resumen' %}
+{% block title %}Resumen{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Resumen</h1>
+    <p class="sub">
+      {% if headline.last_upload %}Última subida: {{ headline.last_upload|dt }}.{% else %}Todavía no hay sesiones subidas.{% endif %}
+    </p>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('exportar_libro', **filters.query()) }}">Descargar Excel</a>
+    <a class="btn ghost" href="{{ url_for('datos', **filters.query()) }}">Más formatos</a>
+  </div>
+</div>
+
+{{ ui.filter_bar('resumen', runs, excluded_count) }}
+
+{% if not runs %}
+<div class="card empty">
+  {% if filters.active or excluded_count %}
+  Ninguna sesión entra en este recorte. Prueba a quitar filtros o revisa las <a href="{{ url_for('sesiones') }}">sesiones excluidas</a>.
+  {% else %}
+  Aquí aparecerán las sesiones en cuanto un visor suba su primer JSON.
+  {% endif %}
+</div>
+{% else %}
+
+<div class="grid kpi">
+  <div class="card stat">
+    <div class="label">Sesiones</div>
+    <div class="value">{{ headline.sessions }}</div>
+    <div class="note">{{ headline.participants }} PIN {{ 'distinto' if headline.participants == 1 else 'distintos' }}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Completaron los cuatro escenarios</div>
+    <div class="value">{{ headline.completed_ratio|pct }}</div>
+    <div class="note">{{ headline.completed_all }} de {{ headline.sessions }} sesiones</div>
+    {{ ui.meter(headline.completed_ratio, 'Completaron los cuatro escenarios: ' ~ headline.completed_all ~ ' de ' ~ headline.sessions) }}
+  </div>
+  <div class="card stat">
+    <div class="label">Duración mediana de la sesión</div>
+    <div class="value">{{ headline.duration.median|clock }} <small>min</small></div>
+    <div class="note">
+      {% if headline.duration.n > 1 %}entre {{ headline.duration.min|clock }} y {{ headline.duration.max|clock }}{% else %}con narración y traslados{% endif %}
+    </div>
+  </div>
+  <div class="card stat">
+    <div class="label">Sesiones con avisos</div>
+    <div class="value">{{ headline.with_issues }}</div>
+    <div class="note">
+      {% if headline.issues %}<a href="{{ url_for('sesiones', **filters.query()) }}">{{ headline.issues }} {{ 'aviso' if headline.issues == 1 else 'avisos' }} de integridad</a>{% else %}sin avisos de integridad{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="section-head">
+  <h2>Los cuatro escenarios</h2>
+</div>
+<div class="grid four">
+  {% for card in cards %}
+  <div class="card">
+    <h3>{{ card.meta.short }} · {{ card.meta.name }}</h3>
+    <p class="sub">{{ card.completed }} de {{ headline.sessions }} lo completaron</p>
+    <div style="margin-top: 10px">{{ ui.meter(card.completed_ratio, card.meta.name ~ ': ' ~ card.completed ~ ' de ' ~ headline.sessions ~ ' lo completaron') }}</div>
+    <dl class="facts">
+      <dt>Tiempo mediano</dt><dd>{{ card.time.median|clock }}</dd>
+      <dt>{{ card.meta.events_label }} (mediana)</dt><dd>{{ card.events.median|num(1 if card.events.median is not none and card.events.median % 1 else 0) }}</dd>
+      <dt>{{ card.meta.error_label|capitalize }} (media)</dt><dd>{{ card.errors.mean|num }}</dd>
+    </dl>
+    <p style="margin-top: 12px; font-size: 13.5px"><a href="{{ url_for('escenarios', **filters.query()) }}#e{{ card.meta.number }}">Ver el detalle</a></p>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid wide-left" style="margin-top: 16px">
+  <figure class="card" style="margin: 0">
+    <h3>Tiempo por escenario</h3>
+    <p class="sub">Cada punto es una sesión que completó el escenario; la línea vertical marca la mediana.</p>
+    <div class="card-body">
+      {% if strip.empty %}
+      <div class="empty">Ninguna sesión del recorte completó un escenario.</div>
+      {% else %}
+      {{ ui.difficulty_legend(strip.difficulties, round=true) }}
+      <div class="strip{{ ' dense' if strip.dense }}" style="margin-top: 10px">
+        {% for row in strip.rows %}
+        <div class="strip-label">{{ row.meta.short }} <small>{{ row.meta.name }}</small></div>
+        <div class="strip-plot" style="--lanes: {{ row.lanes }}">
+          {% for tick in strip.ticks[1:] %}<i class="gridline-v" style="left: {{ tick.x|css }}"></i>{% endfor %}
+          {% if row.median_x is not none %}<i class="median" style="left: {{ row.median_x|css }}"></i>{% endif %}
+          {% for point in row.points %}
+          <a class="dot d{{ point.run.difficulty if point.run.difficulty in DIFFICULTIES else 0 }}"
+             href="{{ url_for('sesion', run_id=point.run.id) }}"
+             style="left: {{ point.x|css }}; --lane: {{ point.lane }}"
+             aria-label="PIN {{ point.run.pin }}: {{ point.seconds|clock }} en {{ row.meta.name }}"
+             data-tip-value="{{ point.seconds|clock }}"
+             data-tip="PIN {{ point.run.pin }} · sesión {{ point.run.session_id }}"
+             data-tip-note="{{ point.run.difficulty_label }} · {{ point.run.local_start|dt('%d/%m/%Y') }}"></a>
+          {% endfor %}
+        </div>
+        <div class="strip-row-end">{% if row.points %}mediana <b>{{ row.stats.median|clock }}</b>{% else %}sin datos{% endif %}</div>
+        {% endfor %}
+        <div></div>
+        <div class="axis-x" aria-hidden="true">
+          {% for tick in strip.ticks %}<span style="left: {{ tick.x|css }}">{{ tick.seconds|clock }}</span>{% endfor %}
+        </div>
+        <div></div>
+      </div>
+      <details class="table-view">
+        <summary>Ver los datos en tabla</summary>
+        <div class="table-wrap">
+          <table class="data compact">
+            <thead>
+              <tr><th>PIN</th><th>Dificultad</th>{% for row in strip.rows %}<th class="n">{{ row.meta.short }}</th>{% endfor %}</tr>
+            </thead>
+            <tbody>
+              {% for run in runs %}
+              <tr>
+                <td><a href="{{ url_for('sesion', run_id=run.id) }}">{{ run.pin }}</a></td>
+                <td>{{ run.difficulty_label }}</td>
+                {% for scenario in run.scenarios.values() %}
+                <td class="n">{{ scenario.total_seconds|clock if scenario.completed else '—' }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+  </figure>
+
+  <figure class="card" style="margin: 0">
+    <h3>Sesiones por día</h3>
+    <p class="sub">Pulsa una columna para quedarte con ese día.</p>
+    <div class="card-body">
+      {{ ui.difficulty_legend(days.difficulties) }}
+      <div class="cols" style="margin-top: 14px">
+        <div class="cols-y" aria-hidden="true">
+          {% for tick in days.ticks %}<span style="bottom: {{ tick.y|css }}">{{ tick.value }}</span>{% endfor %}
+        </div>
+        <div class="cols-scroll"><div class="cols-plot">
+          {% for tick in days.ticks[1:] %}<i class="gridline-h" style="bottom: {{ tick.y|css }}"></i>{% endfor %}
+          {% for column in days.columns %}
+          <a class="col" href="{{ url_for('resumen', **filters.query(date_from=column.day, date_to=column.day)) }}"
+             data-tip-value="{{ column.total }} {{ 'sesión' if column.total == 1 else 'sesiones' }}"
+             data-tip="{{ column.day|day }}"
+             data-tip-note="{% for part in column.parts %}{{ DIFFICULTIES.get(part.difficulty, 'Desconocida') }}: {{ part.count }}{{ ' · ' if not loop.last }}{% endfor %}">
+            {% for part in column.parts %}<i class="seg d{{ part.difficulty }}" style="height: {{ part.height|css }}"></i>{% endfor %}
+            {% if days.columns|length <= 12 %}<span class="cap">{{ column.total }}</span>{% endif %}
+            <span class="tick">{{ column.day|day('%d/%m') }}</span>
+          </a>
+          {% endfor %}
+        </div></div>
+      </div>
+      <details class="table-view">
+        <summary>Ver los datos en tabla</summary>
+        <table class="data compact">
+          <thead>
+            <tr><th>Día</th>{% for d in days.difficulties %}<th class="n">{{ DIFFICULTIES.get(d, 'Desconocida') }}</th>{% endfor %}<th class="n">Total</th></tr>
+          </thead>
+          <tbody>
+            {% for column in days.columns %}
+            <tr>
+              <td>{{ column.day|day }}</td>
+              {% for d in days.difficulties %}
+              <td class="n">{{ column.parts|selectattr('difficulty', 'equalto', d)|map(attribute='count')|first|default(0) }}</td>
+              {% endfor %}
+              <td class="n">{{ column.total }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  </figure>
+</div>
+
+<div class="card" style="margin-top: 16px">
+  <h3>Descriptivos por escenario</h3>
+  <p class="sub">El tiempo se calcula sobre las sesiones que completaron el escenario; los errores, sobre las que lo iniciaron.</p>
+  <div class="card-body table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th rowspan="2">Escenario</th>
+          <th rowspan="2">Dificultad</th>
+          <th rowspan="2" class="n">Sesiones</th>
+          <th rowspan="2" class="n">Iniciaron</th>
+          <th rowspan="2" class="n">Completaron</th>
+          <th colspan="5" class="group">Tiempo (min:s)</th>
+          <th colspan="2" class="group">Errores</th>
+        </tr>
+        <tr>
+          <th class="n">Mediana</th><th class="n">Media</th><th class="n">DE</th><th class="n">Mín</th><th class="n">Máx</th>
+          <th class="n">Media</th><th>Qué cuenta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in descriptives %}
+        <tr>
+          <td class="nowrap">{{ row.meta.short }} · {{ row.meta.name }}</td>
+          <td>{{ row.difficulty }}</td>
+          <td class="n">{{ row.sessions }}</td>
+          <td class="n">{{ row.started }}</td>
+          <td class="n">{{ row.completed }}</td>
+          <td class="n">{{ row.time.median|clock }}</td>
+          <td class="n">{{ row.time.mean|clock }}</td>
+          <td class="n">{{ row.time.sd|clock }}</td>
+          <td class="n">{{ row.time.min|clock }}</td>
+          <td class="n">{{ row.time.max|clock }}</td>
+          <td class="n">{{ row.errors.mean|num }}</td>
+          <td class="sub">{{ row.meta.error_label }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

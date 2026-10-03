@@ -4,9 +4,21 @@ services:
     container_name: json-uploader
     restart: unless-stopped
     ports:
-      - "8090:8080"          # ← lo que falta
+      # 26332 es CODEA en un teclado de teléfono (C=2 O=6 D=3 E=3 A=2). El túnel de Cloudflare
+      # apunta a http://raspberrypi:26332; dentro del contenedor se escucha en el 8080.
+      # Sin esta línea Cloudflare devuelve 502 con el servidor perfectamente vivo.
+      - "26332:8080"
     environment:
-      - UPLOAD_API_KEY=CodeaVR2YachayTech2026
+      # Se pueden cambiar en un archivo .env junto a este (ver .env.example)
+      - UPLOAD_API_KEY=${UPLOAD_API_KEY:-CodeaVR2YachayTech2026}
+      - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
+      - DASHBOARD_PUBLIC=${DASHBOARD_PUBLIC:-}
+      - DASHBOARD_TZ=${DASHBOARD_TZ:-America/Guayaquil}
     volumes:
       - ./uploads:/data/uploads
-
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -1,0 +1,121 @@
+{# Piezas que se repiten entre páginas. Se importa "with context" para ver filtros y constantes. #}
+
+{% macro filter_bar(endpoint, runs, excluded_count) %}
+<form class="filters" method="get" action="{{ url_for(endpoint) }}" data-autosubmit>
+  <label>Desde
+    <input type="date" name="desde" value="{{ filters.date_from.isoformat() if filters.date_from else '' }}">
+  </label>
+  <label>Hasta
+    <input type="date" name="hasta" value="{{ filters.date_to.isoformat() if filters.date_to else '' }}">
+  </label>
+  <label>Dificultad
+    <select name="dif">
+      <option value="">Todas</option>
+      {% for value, label in DIFFICULTIES.items() %}
+      <option value="{{ value }}"{% if filters.difficulty == value %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>PIN
+    <input type="search" name="pin" value="{{ filters.pin }}" placeholder="0101  01*  -0000"
+           title="Uno o varios PIN separados por espacios. Con * se admite cualquier final; con un guion delante, se descartan.">
+  </label>
+  {% if filters.with_excluded %}<input type="hidden" name="excluidas" value="1">{% endif %}
+  <button class="btn" type="submit">Aplicar</button>
+  {% if filters.active %}
+  <a class="btn ghost" href="{{ url_for(endpoint, excluidas='1' if filters.with_excluded else none) }}">Quitar filtros</a>
+  {% endif %}
+  <div class="count">
+    <strong>{{ runs|length }}</strong> {{ 'sesión' if runs|length == 1 else 'sesiones' }} en el análisis
+    {%- if excluded_count %} · <a href="{{ url_for('sesiones', **filters.query()) }}">{{ excluded_count }} {{ 'excluida' if excluded_count == 1 else 'excluidas' }}</a>{% endif %}
+  </div>
+</form>
+{% endmacro %}
+
+{% macro meter(ratio, label) %}
+<div class="meter" role="img" aria-label="{{ label }}"><span style="width: {{ ratio|css }}"></span></div>
+{% endmacro %}
+
+{% macro blocks(sequence) %}
+{% if sequence %}
+<span class="blocks">{% for block in sequence %}<span class="block">{{ block }}</span>{% endfor %}</span>
+{% else %}
+<span class="sub">(vacía)</span>
+{% endif %}
+{% endmacro %}
+
+{% macro difficulty_legend(difficulties, round=false) %}
+{% if difficulties|length > 1 %}
+<div class="legend">
+  {% for d in difficulties %}
+  <span><i class="swatch d{{ d }}{{ ' round' if round }}"></i>{{ DIFFICULTIES.get(d, 'Dificultad desconocida') }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{# Columnas con eje. `columns` trae label, count y height; `link` es opcional. #}
+{% macro columns_chart(chart, unit, unit_plural) %}
+<div class="cols">
+  <div class="cols-y" aria-hidden="true">
+    {% for tick in chart.ticks %}<span style="bottom: {{ tick.y|css }}">{{ tick.value }}</span>{% endfor %}
+  </div>
+  <div class="cols-scroll"><div class="cols-plot">
+    {% for tick in chart.ticks[1:] %}<i class="gridline-h" style="bottom: {{ tick.y|css }}"></i>{% endfor %}
+    {% for column in chart.columns %}
+    <div class="col" tabindex="0"
+         data-tip-value="{{ column.count }} {{ unit if column.count == 1 else unit_plural }}"
+         data-tip="{{ caller(column) }}">
+      {% if column.count %}<i class="seg" style="height: {{ column.height|css }}"></i><span class="cap">{{ column.count }}</span>{% endif %}
+      <span class="tick">{{ column.label }}</span>
+    </div>
+    {% endfor %}
+  </div></div>
+</div>
+{% endmacro %}
+
+{# Tabla de calor. `corner` rotula la esquina; el bloque llamador da el texto del tooltip. #}
+{% macro heat_table(heat, corner, vertical=false, totals=true) %}
+<div class="heat-wrap">
+  <table class="heat">
+    <thead>
+      <tr>
+        <th class="corner">{{ corner }}</th>
+        {% for column in heat.columns %}
+        <th scope="col"{% if vertical %} class="vertical"{% endif %}><span>{{ column }}</span></th>
+        {% endfor %}
+        {% if totals %}<th scope="col" class="n">Total</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in heat.rows %}
+      <tr>
+        <th scope="row" title="{{ row.label }}">{{ row.label }}</th>
+        {% for cell in row.cells %}
+        <td class="h{{ cell.level }}{{ ' mark' if cell.marked }}"{% if cell.count %} tabindex="0" data-tip-value="{{ cell.count }}" data-tip="{{ caller(row.label, heat.columns[loop.index0], cell) }}"{% endif %}>{{ cell.count or '·' }}</td>
+        {% endfor %}
+        {% if totals %}<td class="sum">{{ row.total }}</td>{% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{% macro heat_scale() %}
+<span class="scale">menos
+  {% for level in range(1, 7) %}<i style="background: var(--heat-{{ level }})"></i>{% endfor %}
+  más</span>
+{% endmacro %}
+
+{% macro state_form(run, back) %}
+<form method="post" action="{{ url_for('sesion_estado', run_id=run.id) }}" data-state-toggle>
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ back }}">
+  <input type="hidden" name="excluded" value="{{ '0' if run.excluded else '1' }}">
+  <label class="switch" hidden>
+    <input type="checkbox"{% if not run.excluded %} checked{% endif %} aria-label="Incluir la sesión {{ run.id }} en el análisis">
+  </label>
+  <button class="btn" type="submit">{{ 'Incluir' if run.excluded else 'Excluir' }}</button>
+</form>
+{% endmacro %}

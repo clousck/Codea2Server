@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# Carpetas de datos para probar en local
+.devdata*/
+
+# Subidas a medio escribir
+uploads/.subiendo-*.tmp

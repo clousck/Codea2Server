@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% set active = 'archivos' %}
+{% block title %}Archivos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Archivos</h1>
+    <p class="sub">Lo que hay en la carpeta de subidas, tal cual llegó: {{ files|length }} {{ 'archivo' if files|length == 1 else 'archivos' }}, {{ total_size|size }}.</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('exportar_originales') }}">Descargar todos (.zip)</a>
+  </div>
+</div>
+
+<div class="stack">
+  {% if can_edit %}
+  <section class="card">
+    <h3>Subir a mano</h3>
+    <p class="sub">Para los JSON sacados del visor por cable. Se guardan igual que los que sube el propio visor.</p>
+    <form class="card-body dropzone" method="post" action="{{ url_for('archivos_subir') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="file" name="files" accept=".json,.csv" multiple required aria-label="Archivos JSON de sesión">
+      <button class="btn primary" type="submit">Subir</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    {% if files %}
+    <div class="table-wrap">
+      <table class="data" data-sortable>
+        <thead>
+          <tr>
+            <th><button class="sort" type="button">Archivo</button></th>
+            <th><button class="sort" type="button">Estado</button></th>
+            <th><button class="sort" type="button">Subido</button></th>
+            <th class="n"><button class="sort" type="button">Tamaño</button></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for file in files %}
+          <tr>
+            <td>
+              {% if file.is_run %}<a href="{{ url_for('sesion', run_id=file.id) }}"><code>{{ file.name }}</code></a>
+              {% else %}<code>{{ file.name }}</code>{% endif %}
+            </td>
+            <td>
+              {% if file.status == 'ok' %}<span class="status ok">Sesión leída</span>
+              {% elif file.status == 'repaired' %}<span class="status warn">Sesión recuperada</span>
+              {% elif file.status == 'other' %}<span class="status neutral">No se lee</span>
+              {% else %}<span class="status bad">No se pudo leer</span>{% endif %}
+              {% if file.detail %}<div class="sub">{{ file.detail }}</div>{% endif %}
+            </td>
+            <td class="nowrap" data-v="{{ file.mtime }}">{{ file.mtime|dt }}</td>
+            <td class="n" data-v="{{ file.size }}">{{ file.size|size }}</td>
+            <td class="n"><a href="{{ url_for('archivo', name=file.name) }}">Descargar</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">La carpeta de subidas está vacía.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

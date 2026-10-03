@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
+{% set active = 'escenarios' %}
+{% block title %}Escenarios{% endblock %}
+
+{% macro head(section) %}
+<div class="section-head" id="e{{ section.meta.number }}">
+  <h2>{{ section.meta.short }} · {{ section.meta.name }}</h2>
+</div>
+<div class="grid kpi">
+  <div class="card stat">
+    <div class="label">Lo completaron</div>
+    <div class="value">{{ section.completed_ratio|pct }}</div>
+    <div class="note">{{ section.completed }} de {{ section.sessions }} sesiones · {{ section.started }} lo iniciaron</div>
+    {{ ui.meter(section.completed_ratio, section.meta.name ~ ': ' ~ section.completed ~ ' de ' ~ section.sessions ~ ' lo completaron') }}
+  </div>
+  <div class="card stat">
+    <div class="label">Tiempo mediano</div>
+    <div class="value">{{ section.time.median|clock }} <small>min</small></div>
+    <div class="note">{% if section.time.n > 1 %}entre {{ section.time.min|clock }} y {{ section.time.max|clock }}{% else %}de quienes lo completaron{% endif %}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">{{ section.meta.error_label|capitalize }}, de media</div>
+    <div class="value">{{ section.errors.mean|num }}</div>
+    <div class="note">{% if section.errors.n %}máximo {{ section.errors.max }} en una sesión{% else %}sin datos{% endif %}</div>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro counters(section) %}
+<div class="card">
+  <h3>Contadores</h3>
+  <p class="sub">Entre las {{ section.started }} sesiones que iniciaron el escenario.</p>
+  <div class="card-body table-wrap">
+    <table class="data compact">
+      <thead>
+        <tr><th>Qué cuenta</th><th class="n">Total</th><th class="n">Media</th><th class="n">Mediana</th><th class="n">Mín</th><th class="n">Máx</th></tr>
+      </thead>
+      <tbody>
+        {% for row in section.counters %}
+        <tr>
+          <td title="{{ row.doc|capitalize }}">{{ row.label }}<div class="sub mono">{{ row.key }}</div></td>
+          <td class="n">{{ row.stats.total if row.stats.n else '—' }}</td>
+          <td class="n">{{ row.stats.mean|num }}</td>
+          <td class="n">{{ row.stats.median|num }}</td>
+          <td class="n">{{ row.stats.min if row.stats.n else '—' }}</td>
+          <td class="n">{{ row.stats.max if row.stats.n else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro attempts(section, word) %}
+<figure class="card" style="margin: 0">
+  <h3>{{ word|capitalize }} hasta completarlo</h3>
+  <p class="sub">Cuántas sesiones necesitaron 1, 2, 3… {{ word }}. Solo las {{ section.attempts.n }} que lo completaron.</p>
+  <div class="card-body">
+    {% if section.attempts.n %}
+    {% call(column) ui.columns_chart(section.attempts, 'sesión', 'sesiones') %}{{ column.label }} {{ word }}{% endcall %}
+    {% else %}
+    <div class="empty">Ninguna sesión del recorte lo completó.</div>
+    {% endif %}
+  </div>
+</figure>
+{% endmacro %}
+
+{% macro sequences(section) %}
+<div class="card">
+  <h3>Secuencias ejecutadas</h3>
+  <p class="sub">{{ section.sequences.distinct }} {{ 'secuencia distinta' if section.sequences.distinct == 1 else 'secuencias distintas' }}, de la más repetida a la menos.</p>
+  <div class="card-body table-wrap">
+    {% if section.sequences.rows %}
+    <table class="data">
+      <thead>
+        <tr><th>Secuencia</th><th class="n">Bloques</th><th class="n">Veces</th><th class="n">Sesiones</th><th class="n" title="Veces que esta secuencia fue la que completó el escenario">Completó</th></tr>
+      </thead>
+      <tbody>
+        {% for row in section.sequences.rows %}
+        <tr>
+          <td>{{ ui.blocks(row.blocks) }}</td>
+          <td class="n">{{ row.blocks|length }}</td>
+          <td class="n">{{ row.count }}</td>
+          <td class="n">{{ row.sessions }}</td>
+          <td class="n">{{ row.solved }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if section.sequences.hidden %}
+      <tfoot><tr><td colspan="5">Y {{ section.sequences.hidden }} más. Están todas en la tabla <a href="{{ url_for('datos', **filters.query()) }}#intentos">intentos</a>.</td></tr></tfoot>
+      {% endif %}
+    </table>
+    {% else %}
+    <div class="empty">Sin intentos en este recorte.</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Escenarios</h1>
+    <p class="sub">Qué pasó dentro de cada reto, sumando todas las sesiones del recorte.</p>
+  </div>
+  <div class="btn-row">
+    {% for meta in SCENARIOS.values() %}<a class="btn ghost" href="#e{{ meta.number }}">{{ meta.short }} · {{ meta.name }}</a>{% endfor %}
+  </div>
+</div>
+
+{{ ui.filter_bar('escenarios', runs, excluded_count) }}
+
+{% if not runs %}
+<div class="card empty">Ninguna sesión entra en este recorte.</div>
+{% else %}
+{% set e1, e2, e3, e4 = sections %}
+
+{% if filters.difficulty is none and runs|map(attribute='difficulty')|unique|list|length > 1 %}
+<div class="notice info" role="note">El recorte mezcla dificultades, y cada una tiene su propio reto. Filtra por dificultad para compararlas por separado.</div>
+{% endif %}
+
+{# ── Escenario 1 ── #}
+{{ head(e1) }}
+<div class="grid two" style="margin-top: 16px">
+  {{ attempts(e1, 'intentos') }}
+  {{ counters(e1) }}
+</div>
+<div style="margin-top: 16px">{{ sequences(e1) }}</div>
+
+{# ── Escenario 2 ── #}
+{{ head(e2) }}
+<div class="grid two" style="margin-top: 16px">
+  <figure class="card" style="margin: 0">
+    <h3>Qué opción marcaron en cada módulo</h3>
+    <p class="sub">Veces que se seleccionó cada opción. El recuadro señala las correctas de cada módulo.</p>
+    <div class="card-body">
+      {% if e2.picks.peak %}
+      {% call(option, module, cell) ui.heat_table(e2.picks, 'Opción \\ módulo') %}{{ module }} · {{ option }}{{ ' (correcta)' if cell.marked else ' (incorrecta)' }}{% endcall %}
+      <p class="figure-note"><i class="key-mark"></i>Opción correcta en ese módulo · {{ ui.heat_scale() }}</p>
+      {% else %}
+      <div class="empty">Sin selecciones en este recorte.</div>
+      {% endif %}
+    </div>
+  </figure>
+  <div class="card">
+    <h3>Por módulo</h3>
+    <p class="sub">Una sesión «sin error» no marcó ninguna opción incorrecta en ese módulo.</p>
+    <div class="card-body table-wrap">
+      <table class="data compact">
+        <thead>
+          <tr><th>Módulo</th><th class="n">Sesiones</th><th class="n">Selecciones</th><th class="n">Incorrectas</th><th class="n">Quitadas</th><th class="n">Sin error</th></tr>
+        </thead>
+        <tbody>
+          {% for module in e2.modules %}
+          <tr>
+            <td>{{ module.name }}</td>
+            <td class="n">{{ module.sessions }}</td>
+            <td class="n">{{ module.selections }}</td>
+            <td class="n">{{ module.wrong }}</td>
+            <td class="n">{{ module.removed }}</td>
+            <td class="n">{{ module.clean }} <span class="sub">({{ (module.clean / module.sessions)|pct if module.sessions else '—' }})</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty">Sin selecciones en este recorte.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div style="margin-top: 16px">{{ counters(e2) }}</div>
+
+{# ── Escenario 3 ── #}
+{{ head(e3) }}
+<div class="grid two" style="margin-top: 16px">
+  <figure class="card" style="margin: 0">
+    <h3>Repeticiones elegidas según la ficha</h3>
+    <p class="sub">Cuántas ejecuciones se lanzaron con cada número de repeticiones, por tipo de objeto.</p>
+    <div class="card-body">
+      {% if e3.repetitions.peak %}
+      {% call(item, repetitions, cell) ui.heat_table(e3.repetitions, 'Ficha \\ repeticiones') %}{{ item }} × {{ repetitions }} repeticiones{% endcall %}
+      <p class="figure-note">{{ ui.heat_scale() }}</p>
+      {% else %}
+      <div class="empty">Sin ejecuciones en este recorte.</div>
+      {% endif %}
+    </div>
+  </figure>
+  {{ attempts(e3, 'ejecuciones') }}
+</div>
+<div class="grid two" style="margin-top: 16px">
+  {{ counters(e3) }}
+  {{ sequences(e3) }}
+</div>
+
+{# ── Escenario 4 ── #}
+{{ head(e4) }}
+<div class="stack" style="margin-top: 16px">
+  <figure class="card" style="margin: 0">
+    <h3>Qué ficha se puso en cada hueco</h3>
+    <p class="sub">Filas: la figura que esperaba el hueco. Columnas: la ficha colocada. El recuadro es la pareja correcta.</p>
+    <div class="card-body">
+      {% if e4.confusion.peak %}
+      {% call(socket, chip, cell) ui.heat_table(e4.confusion, 'Hueco \\ ficha', vertical=true) %}{{ chip }} en el hueco {{ socket }}{{ ' (encaja)' if cell.marked else ' (no encaja)' }}{% endcall %}
+      <p class="figure-note"><i class="key-mark"></i>Ficha correcta · {{ ui.heat_scale() }}</p>
+      {% else %}
+      <div class="empty">Sin colocaciones en este recorte.</div>
+      {% endif %}
+    </div>
+  </figure>
+</div>
+<div class="grid two" style="margin-top: 16px">
+  <div class="card">
+    <h3>Por hueco</h3>
+    <p class="sub">«A la primera» cuenta las sesiones cuya primera ficha en ese hueco ya era la correcta.</p>
+    <div class="card-body table-wrap">
+      <table class="data compact">
+        <thead>
+          <tr><th>Hueco</th><th class="n">Sesiones</th><th class="n">Colocaciones</th><th class="n">Incorrectas</th><th class="n">A la primera</th></tr>
+        </thead>
+        <tbody>
+          {% for socket in e4.sockets %}
+          <tr>
+            <td><code>{{ socket.name }}</code></td>
+            <td class="n">{{ socket.sessions }}</td>
+            <td class="n">{{ socket.placements }}</td>
+            <td class="n">{{ socket.wrong }}</td>
+            <td class="n">{{ socket.first_try }} <span class="sub">({{ (socket.first_try / socket.sessions)|pct if socket.sessions else '—' }})</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">Sin colocaciones en este recorte.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{ counters(e4) }}
+</div>
+{% endif %}
+{% endblock %}

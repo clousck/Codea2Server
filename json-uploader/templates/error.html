@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Error {{ error.code }}{% endblock %}
+
+{% block content %}
+<div class="card empty">
+  <h1>{{ {404: 'No encontrado', 400: 'No se pudo completar', 413: 'Archivo demasiado grande'}.get(error.code, 'Error') }}</h1>
+  <p style="margin-top: 8px">
+    {% if error.code == 404 and 'URL' in error.description %}Esa página no existe.{% else %}{{ error.description }}{% endif %}
+  </p>
+  <p style="margin-top: 16px"><a href="{{ url_for('resumen') }}">Volver al resumen</a></p>
+</div>
+{% endblock %}

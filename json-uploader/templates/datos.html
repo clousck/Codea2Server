@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
+{% set active = 'datos' %}
+{% block title %}Datos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Datos</h1>
+    <p class="sub">Las sesiones convertidas en tablas, listas para Excel, R, Python o SPSS. Las descargas llevan el mismo recorte que ves aquí.</p>
+  </div>
+</div>
+
+{{ ui.filter_bar('datos', runs, excluded_count) }}
+
+<div class="grid two">
+  <div class="card">
+    <h3>Todo de una vez</h3>
+    <p class="sub">Un libro de Excel con una hoja por tabla, o los mismos datos en CSV.</p>
+    <div class="card-body btn-row">
+      <a class="btn primary" href="{{ url_for('exportar_libro', **filters.query()) }}">Excel (.xlsx)</a>
+      <a class="btn" href="{{ url_for('exportar_csv', **filters.query()) }}">CSV (.zip)</a>
+      <a class="btn" href="{{ url_for('exportar_originales') }}">JSON originales (.zip)</a>
+    </div>
+    <p class="figure-note">Los JSON originales son la copia de seguridad: todos los archivos de la carpeta de subidas, sin recorte.</p>
+    <form method="get" action="{{ url_for('datos') }}" data-autosubmit style="margin-top: 12px">
+      {% for key, value in filters.query(with_excluded=false).items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+      <label class="switch"><input type="checkbox" name="excluidas" value="1"{% if filters.with_excluded %} checked{% endif %}> Incluir también las sesiones excluidas{% if excluded_count %} ({{ excluded_count }}){% endif %}</label>
+      <noscript><button class="btn" type="submit">Aplicar</button></noscript>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Para tenerlo en cuenta</h3>
+    <ul class="sub" style="margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px">
+      <li>La columna <code>file</code> es la clave: une cualquier tabla con <code>sesiones</code>.</li>
+      <li><code>pin</code> es texto. En Excel abre el <strong>.xlsx</strong>: al abrir un CSV, Excel se come los ceros a la izquierda (0101 → 101).</li>
+      <li>Los CSV van con coma, punto decimal y UTF-8. Las banderas son 0/1 y lo que no aplica queda vacío.</li>
+      <li>Los tiempos van en segundos, redondeados a milésimas; las marcas <code>…Utc</code>, tal como las escribió el visor.</li>
+    </ul>
+    <details class="table-view">
+      <summary>Descargar desde Python o R</summary>
+      <p class="sub">Cualquier descarga admite autenticación básica: el usuario da igual y la contraseña es la del panel.</p>
+<pre class="raw">import io, requests, pandas as pd
+
+url = "{{ url_for('exportar', name='sesiones', fmt='csv', _external=true) }}"
+r = requests.get(url, auth=("codea", "LA_CONTRASEÑA"))
+sesiones = pd.read_csv(io.BytesIO(r.content), dtype={"pin": str})</pre>
+<pre class="raw" style="margin-top: 8px">library(httr); library(readr)
+
+r <- GET("{{ url_for('exportar', name='sesiones', fmt='csv', _external=true) }}",
+         authenticate("codea", "LA_CONTRASEÑA"))
+sesiones <- read_csv(content(r, "raw"), col_types = cols(pin = col_character()))</pre>
+    </details>
+  </div>
+</div>
+
+<div class="section-head">
+  <h2>Tablas</h2>
+</div>
+<div class="stack">
+  {% for table in tables %}
+  <section class="card" id="{{ table.name }}">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px 24px">
+      <div>
+        <h3><code style="font-size: 15px">{{ table.name }}</code></h3>
+        <p class="sub">{{ table.description }}</p>
+        <p class="sub">{{ table.rows|length }} {{ 'fila' if table.rows|length == 1 else 'filas' }} · {{ table.columns|length }} columnas</p>
+      </div>
+      <div class="btn-row">
+        <a class="btn" href="{{ url_for('exportar', name=table.name, fmt='csv', **filters.query()) }}">CSV</a>
+        <a class="btn" href="{{ url_for('exportar', name=table.name, fmt='xlsx', **filters.query()) }}">Excel</a>
+        <a class="btn" href="{{ url_for('exportar', name=table.name, fmt='json', **filters.query()) }}">JSON</a>
+      </div>
+    </div>
+
+    <details class="table-view"{% if loop.first %} open{% endif %}>
+      <summary>Vista previa{% if table.rows|length > preview %} (primeras {{ preview }} filas){% endif %}</summary>
+      {% if table.rows %}
+      <div class="table-wrap">
+        <table class="data compact">
+          <thead>
+            <tr>{% for column in table.columns %}<th{% if column.kind in ('int', 'float', 'flag') %} class="n"{% endif %} title="{{ column.description }}">{{ column.name }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for row in table.rows[:preview] %}
+            <tr>
+              {% for column in table.columns %}
+              <td class="{{ 'n' if column.kind in ('int', 'float', 'flag') else 'nowrap' if column.kind != 'text' or column.name in ('file', 'pin') else '' }}">{{ cell(row.get(column.name), column.kind) }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="sub">La tabla está vacía en este recorte.</p>
+      {% endif %}
+    </details>
+
+    {% if table.name != 'diccionario' %}
+    <details class="table-view">
+      <summary>Qué significa cada columna</summary>
+      <table class="data compact">
+        <thead><tr><th>Columna</th><th>Qué mide</th></tr></thead>
+        <tbody>
+          {% for column in table.columns %}
+          <tr><td class="nowrap"><code>{{ column.name }}</code></td><td>{{ column.description }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

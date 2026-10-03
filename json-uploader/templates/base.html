@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}Panel{% endblock %} · CODEA 2</title>
+  <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <script src="{{ asset('theme.js') }}"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('resumen', **filters.query()) }}">CODEA 2 <small>Telemetría</small></a>
+    <nav class="nav" aria-label="Secciones">
+      {% if can_edit or is_public %}
+      {% for endpoint, label in [('resumen', 'Resumen'), ('sesiones', 'Sesiones'), ('escenarios', 'Escenarios'), ('datos', 'Datos'), ('archivos', 'Archivos')] %}
+      <a href="{{ url_for(endpoint, **filters.query()) }}"{% if active == endpoint %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+      {% endif %}
+    </nav>
+    <div class="topbar-actions">
+      <button class="btn ghost" type="button" data-theme-toggle aria-label="Cambiar entre tema claro y oscuro" title="Tema claro u oscuro">◐</button>
+      {% if can_edit %}
+      <form method="post" action="{{ url_for('logout') }}"><button class="btn ghost" type="submit">Salir</button></form>
+      {% elif is_public and active != 'login' %}
+      <a class="btn ghost" href="{{ url_for('login', next=request.full_path.rstrip('?')) }}">Entrar</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="stack" style="margin-bottom: 16px">
+      {% for category, message in messages %}
+      <div class="notice {{ category }}" role="status">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>CODEA 2 · Yachay Tech · Las horas se muestran en {{ zone_name }}.</footer>
+
+  <div id="tip" role="tooltip" hidden><strong></strong><span></span><span></span></div>
+  <script src="{{ asset('app.js') }}" defer></script>
+</body>
+</html>

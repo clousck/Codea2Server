@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
+{% set active = 'sesiones' %}
+{% block title %}PIN {{ run.pin }} · sesión {{ run.session_id }}{% endblock %}
+
+{% macro result(row, scenario) %}
+{% if scenario.meta.events_key == 'attempts' %}
+  {% if row.solved %}<span class="status ok">Resolvió el escenario</span>
+  {% elif scenario.number == 3 %}<span class="status neutral">Pasada intermedia</span>
+  {% else %}<span class="status bad">No llegó a la meta</span>{% endif %}
+{% elif scenario.meta.events_key == 'selections' %}
+  {% if not row.selected %}<span class="status neutral">La quitó</span>
+  {% elif row.correct %}<span class="status ok">Correcta</span>
+  {% else %}<span class="status bad">Incorrecta</span>{% endif %}
+{% else %}
+  {% if row.correct %}<span class="status ok">Encaja</span>{% else %}<span class="status bad">No es la del hueco</span>{% endif %}
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="sub"><a href="{{ url_for('sesiones', **filters.query()) }}">Sesiones</a> /</p>
+    <h1>PIN {{ run.pin or '(sin PIN)' }} <span class="sub" style="font-size: 16px; font-weight: 400">· sesión {{ run.session_id if run.session_id is not none else '—' }}</span></h1>
+    <p class="sub" style="margin-top: 4px">
+      <span class="tag">{{ run.difficulty_label }}</span>
+      {% if run.excluded %}<span class="tag">Excluida del análisis</span>{% endif %}
+      {{ run.started_at|dt('%d/%m/%Y, %H:%M:%S') }} · {{ run.seconds|clock }} min ·
+      {{ run.scenarios_completed }} de {{ SCENARIOS|length }} escenarios completados
+    </p>
+  </div>
+  <div class="btn-row">
+    {% if previous %}<a class="btn ghost" href="{{ url_for('sesion', run_id=previous.id, **filters.query()) }}" title="PIN {{ previous.pin }}">← Anterior</a>{% endif %}
+    {% if following %}<a class="btn ghost" href="{{ url_for('sesion', run_id=following.id, **filters.query()) }}" title="PIN {{ following.pin }}">Siguiente →</a>{% endif %}
+    <a class="btn" href="{{ url_for('archivo', name=run.file.name) }}">Descargar JSON</a>
+  </div>
+</div>
+
+<div class="stack">
+  {% if run.issues %}
+  <div class="notice" role="note">
+    <div>
+      <strong>{{ run.issues|length }} {{ 'aviso' if run.issues|length == 1 else 'avisos' }} de integridad</strong>
+      <ul>
+        {% for issue in run.issues %}
+        <li>{% if issue.scenario %}<strong>{{ SCENARIOS[issue.scenario].short }}.</strong> {% endif %}{{ issue.message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if timeline %}
+  <figure class="card" style="margin: 0">
+    <h3>Línea de tiempo</h3>
+    <p class="sub">Los tramos son los escenarios; encima, cada intento, selección o colocación. Lo que queda entre tramos es narración y traslado.</p>
+    <div class="card-body tl">
+      <div class="tl-marks">
+        {% for mark in timeline.marks %}
+        <span class="tl-mark {{ mark.state }}" tabindex="0" style="left: {{ mark.x|css }}"
+              data-tip-value="{{ mark.label }} · {{ mark.seconds|clock }}"
+              data-tip="{{ mark.detail }}"
+              data-tip-note="{{ SCENARIOS[mark.scenario].short }} · {{ {'ok': 'acierto', 'bad': 'error', 'neutral': 'ni acierto ni error'}[mark.state] }}"></span>
+        {% endfor %}
+      </div>
+      <div class="tl-track">
+        {% for segment in timeline.segments %}
+        <div class="tl-seg" tabindex="0" style="left: {{ segment.left|css }}; width: {{ segment.width|css }}"
+             data-tip-value="{{ segment.seconds|clock }}"
+             data-tip="{{ segment.meta.short }} · {{ segment.meta.name }}"
+             data-tip-note="empezó en el minuto {{ segment.start|clock }}{{ '' if segment.completed else ' · sin completar' }}">
+          {%- if segment.width >= 0.05 %}{{ segment.meta.short }}{% endif -%}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="axis-x" aria-hidden="true">
+        {% for tick in timeline.ticks %}<span style="left: {{ tick.x|css }}">{{ tick.seconds|clock }}</span>{% endfor %}
+      </div>
+      <div class="legend" style="margin-top: 8px">
+        <span><i class="key seg"></i>Escenario</span>
+        <span><i class="key ok"></i>Acierto</span>
+        <span><i class="key bad"></i>Error</span>
+        <span><i class="key neutral"></i>Ni acierto ni error</span>
+      </div>
+    </div>
+  </figure>
+  {% endif %}
+
+  {% for number, scenario in run.scenarios.items() %}
+  {% set meta = scenario.meta %}
+  {% set rows = details[number] %}
+  <section class="card" id="e{{ number }}">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px">
+      <h3>{{ meta.short }} · {{ meta.name }}</h3>
+      {% if scenario.completed %}<span class="status ok">Completado en {{ scenario.total_seconds|clock }}</span>
+      {% elif scenario.started %}<span class="status neutral">Iniciado, sin completar</span>
+      {% else %}<span class="sub">No se inició</span>{% endif %}
+    </div>
+
+    {% if scenario.present and (scenario.started or rows) %}
+    <ul class="pairs">
+      <li><span>Inicio</span>{{ scenario.started_at|dt('%H:%M:%S') }}</li>
+      <li><span>{{ meta.events_label }}</span>{{ rows|length }}</li>
+      {% for key in meta.counters %}
+      <li title="{{ key }}: {{ COUNTER_DOCS[key] }}"><span>{{ COUNTER_LABELS[key] }}</span>{{ scenario.counter(key) if scenario.counter(key) is not none else '—' }}</li>
+      {% endfor %}
+    </ul>
+
+    {% if rows %}
+    <div class="card-body table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th class="n">#</th>
+            <th>Hora</th>
+            <th class="n" title="Segundos desde el inicio del escenario">Desde el inicio</th>
+            {% if meta.events_key == 'attempts' %}
+            <th class="n" title="durationSeconds: lo que tardó en pulsar ejecutar, sin contar la ejecución">Pensó</th>
+            {% if number == 3 %}<th class="n">Repeticiones</th><th>Ficha de tipo</th>{% endif %}
+            <th>Secuencia</th>
+            {% elif meta.events_key == 'selections' %}
+            <th>Módulo</th><th>Opción</th>
+            {% else %}
+            <th>Hueco</th><th>Ficha colocada</th>
+            {% endif %}
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="n">{{ row.index }}</td>
+            <td class="nowrap">{{ row.at|dt('%H:%M:%S') }}</td>
+            <td class="n">{{ row.offset|secs }}</td>
+            {% if meta.events_key == 'attempts' %}
+            <td class="n">{{ row.event.durationSeconds|secs if row.event.durationSeconds is number else '—' }}</td>
+            {% if number == 3 %}
+            <td class="n">{{ row.repetitions if row.repetitions is not none else '—' }}</td>
+            <td>{{ row.event.itemType or '(sin ficha)' }}</td>
+            {% endif %}
+            <td>{{ ui.blocks(row.blocks) }}</td>
+            {% elif meta.events_key == 'selections' %}
+            <td>{{ row.event.module }}</td>
+            <td>{{ row.event.option }}</td>
+            {% else %}
+            <td><code>{{ row.event.socket }}</code></td>
+            <td><code>{{ row.event.chip }}</code></td>
+            {% endif %}
+            <td>{{ result(row, scenario) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="sub" style="margin-top: 12px">Sin {{ meta.events_label|lower }} registrados.</p>
+    {% endif %}
+    {% elif not scenario.present %}
+    <p class="sub" style="margin-top: 8px">El JSON no trae este escenario.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  {% if can_edit %}
+  <section class="card">
+    <h3>Nota y análisis</h3>
+    <p class="sub">Una sesión excluida sigue guardada, pero no cuenta en el resumen, en los escenarios ni en las descargas.</p>
+    <form method="post" action="{{ url_for('sesion_estado', run_id=run.id) }}" class="card-body" style="display: grid; gap: 12px; max-width: 640px">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="excluded" value="0">
+      <label class="switch"><input type="checkbox" name="excluded" value="1"{% if run.excluded %} checked{% endif %}> Excluir esta sesión del análisis</label>
+      <label class="sub" style="display: grid; gap: 4px">Nota
+        <textarea name="note" maxlength="2000" placeholder="Por ejemplo: prueba interna, se quitó el visor en el escenario 2…">{{ run.note }}</textarea>
+      </label>
+      <div><button class="btn primary" type="submit">Guardar</button></div>
+    </form>
+  </section>
+  {% elif run.note %}
+  <section class="card">
+    <h3>Nota</h3>
+    <p style="margin-top: 8px">{{ run.note }}</p>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h3>JSON original</h3>
+    <p class="sub"><code>{{ run.file.name }}</code> · {{ run.file.size|size }} · subido el {{ run.file.mtime|dt }}{% if run.file.detail %} · {{ run.file.detail }}{% endif %}</p>
+    <details class="table-view">
+      <summary>Ver el contenido</summary>
+      <pre class="raw">{{ raw }}</pre>
+    </details>
+  </section>
+</div>
+{% endblock %}

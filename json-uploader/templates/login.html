@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% set active = 'login' %}
+{% block title %}Entrar{% endblock %}
+
+{% block content %}
+<div class="card login">
+  <h1 style="font-size: 20px">Panel de telemetría</h1>
+  <p class="sub">CODEA 2 · datos de las sesiones en el visor.</p>
+  <form method="post" action="{{ url_for('login') }}">
+    <input type="hidden" name="next" value="{{ target }}">
+    {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+    <label>Contraseña
+      <input type="password" name="password" autocomplete="current-password" required autofocus>
+    </label>
+    <button class="btn primary" type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}

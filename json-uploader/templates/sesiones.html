@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
+{% set active = 'sesiones' %}
+{% block title %}Sesiones{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Sesiones</h1>
+    <p class="sub">Una fila por partida. Las excluidas no cuentan en el resumen, en los escenarios ni en las descargas.</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('exportar', name='sesiones', fmt='xlsx', **filters.query()) }}">Excel</a>
+    <a class="btn" href="{{ url_for('exportar', name='sesiones', fmt='csv', **filters.query()) }}">CSV</a>
+  </div>
+</div>
+
+{{ ui.filter_bar('sesiones', runs, excluded_count) }}
+
+{% if not rows %}
+<div class="card empty">
+  {% if filters.active %}Ninguna sesión entra en este recorte.{% else %}Aquí aparecerán las sesiones en cuanto un visor suba su primer JSON.{% endif %}
+</div>
+{% else %}
+<div class="card">
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px">
+    <input type="search" placeholder="Buscar en la tabla" aria-label="Buscar en la tabla" data-table-filter="tabla-sesiones">
+    <span class="sub" data-filter-count="tabla-sesiones"></span>
+    <span class="sub" data-stale-note hidden>Cambio guardado. <a href="{{ request.full_path.rstrip('?') }}">Actualizar los totales</a></span>
+  </div>
+  <div class="table-wrap">
+    <table class="data" id="tabla-sesiones" data-sortable>
+      <thead>
+        <tr>
+          {% if can_edit %}<th>En el análisis</th>{% endif %}
+          <th><button class="sort" type="button">PIN</button></th>
+          <th class="n"><button class="sort" type="button">Sesión</button></th>
+          <th><button class="sort" type="button">Dificultad</button></th>
+          <th><button class="sort" type="button">Inicio</button></th>
+          <th class="n"><button class="sort" type="button">Duración</button></th>
+          {% for meta in SCENARIOS.values() %}
+          <th class="n" title="{{ meta.name }}: tiempo del escenario"><button class="sort" type="button">{{ meta.short }}</button></th>
+          {% endfor %}
+          <th class="n"><button class="sort" type="button">Avisos</button></th>
+          <th>Nota</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in rows %}
+        <tr{% if run.excluded %} class="dim"{% endif %}>
+          {% if can_edit %}<td class="keep">{{ ui.state_form(run, request.full_path.rstrip('?')) }}</td>{% endif %}
+          <td data-v="{{ run.pin }}">
+            <a href="{{ url_for('sesion', run_id=run.id, **filters.query()) }}"><strong>{{ run.pin or '(sin PIN)' }}</strong></a>
+            {# El nombre solo se enseña cuando no es el que tocaría por PIN y sesión: ahí es lo único que la distingue #}
+            {% if run.file.name != run.pin ~ '_' ~ run.session_id ~ '.json' %}<div class="sub mono">{{ run.file.name }}</div>{% endif %}
+          </td>
+          <td class="n">{{ run.session_id if run.session_id is not none else '—' }}</td>
+          <td>{{ run.difficulty_label }}</td>
+          <td class="nowrap" data-v="{{ run.started_at.isoformat() if run.started_at else '' }}">{{ run.started_at|dt }}</td>
+          <td class="n" data-v="{{ run.seconds if run.seconds is not none else '' }}">{{ run.seconds|clock }}</td>
+          {% for scenario in run.scenarios.values() %}
+          <td class="n" data-v="{{ scenario.total_seconds if scenario.completed and scenario.total_seconds is not none else '' }}">
+            {% if scenario.completed %}<span class="status ok" title="Completado">{{ scenario.total_seconds|clock }}</span>
+            {% elif scenario.started %}<span class="status neutral" title="Iniciado, sin completar">sin completar</span>
+            {% else %}<span class="sub" title="No se inició">no iniciado</span>{% endif %}
+          </td>
+          {% endfor %}
+          <td class="n" data-v="{{ run.issues|length }}">
+            {% if run.issues %}<span class="status warn" title="{% for issue in run.issues %}{{ issue.message }}{{ ' ' if not loop.last }}{% endfor %}">{{ run.issues|length }}</span>{% else %}<span class="sub">0</span>{% endif %}
+          </td>
+          <td class="sub"><span class="tag" data-excluded-tag{% if not run.excluded %} hidden{% endif %}>Excluida</span> {{ run.note }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

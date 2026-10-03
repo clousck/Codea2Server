@@ -1,0 +1,217 @@
+{
+    "pin": "0103",
+    "sessionId": 4,
+    "difficulty": 1,
+    "startedUtc": "2026-09-30T19:24:57.4243840Z",
+    "endedUtc": "2026-09-30T19:34:07.5798020Z",
+    "escenario1": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 58.102943420410159,
+        "startedUtc": "2026-09-30T19:25:42.9406300Z",
+        "endedUtc": "2026-09-30T19:26:41.0494150Z",
+        "failedAttempts": 1,
+        "blocksGrabbed": 19,
+        "blocksReleased": 16,
+        "errorCollisionBot": 0,
+        "errorIncompleteSequence": 0,
+        "errorInvalidCommand": 0,
+        "attempts": [
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Avanzar",
+                    "Girar Derecha"
+                ],
+                "solved": 0,
+                "durationSeconds": 17.24616241455078,
+                "timestamp": "2026-09-30T19:26:00.1836100Z"
+            },
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Avanzar",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Izquierda",
+                    "Avanzar",
+                    "Usar"
+                ],
+                "solved": 1,
+                "durationSeconds": 33.28081512451172,
+                "timestamp": "2026-09-30T19:26:36.0761090Z"
+            }
+        ]
+    },
+    "escenario2": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 116.64460754394531,
+        "startedUtc": "2026-09-30T19:26:53.2648350Z",
+        "endedUtc": "2026-09-30T19:29:13.1888150Z",
+        "wrongSelections": 2,
+        "selections": [
+            {
+                "module": "enfriamiento",
+                "option": "Agregar agua",
+                "selected": 1,
+                "correct": 1,
+                "timestamp": "2026-09-30T19:27:23.7292490Z"
+            },
+            {
+                "module": "generadores",
+                "option": "Conectar una batería cargada",
+                "selected": 1,
+                "correct": 1,
+                "timestamp": "2026-09-30T19:28:28.5336460Z"
+            },
+            {
+                "module": "motores",
+                "option": "Encender el ventilador",
+                "selected": 1,
+                "correct": 0,
+                "timestamp": "2026-09-30T19:28:45.9478880Z"
+            },
+            {
+                "module": "motores",
+                "option": "Encender el ventilador",
+                "selected": 0,
+                "correct": 0,
+                "timestamp": "2026-09-30T19:28:52.0309010Z"
+            },
+            {
+                "module": "motores",
+                "option": "Encender el ventilador",
+                "selected": 1,
+                "correct": 0,
+                "timestamp": "2026-09-30T19:29:01.6970560Z"
+            },
+            {
+                "module": "motores",
+                "option": "Agregar gasolina",
+                "selected": 1,
+                "correct": 1,
+                "timestamp": "2026-09-30T19:29:06.4329210Z"
+            },
+            {
+                "module": "motores",
+                "option": "Encender el ventilador",
+                "selected": 0,
+                "correct": 0,
+                "timestamp": "2026-09-30T19:29:13.1875080Z"
+            }
+        ]
+    },
+    "escenario3": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 191.65899658203126,
+        "startedUtc": "2026-09-30T19:29:27.3491780Z",
+        "endedUtc": "2026-09-30T19:32:39.0086220Z",
+        "failedAttempts": 0,
+        "blocksGrabbed": 3,
+        "blocksReleased": 3,
+        "errorCollisionBot": 0,
+        "errorIncompleteSequence": 0,
+        "errorInvalidCommand": 6,
+        "attempts": [
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 6,
+                "itemType": "Caja",
+                "solved": 0,
+                "durationSeconds": 35.940643310546878,
+                "timestamp": "2026-09-30T19:30:03.2900980Z"
+            },
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 2,
+                "itemType": "Caja",
+                "solved": 0,
+                "durationSeconds": 19.817291259765626,
+                "timestamp": "2026-09-30T19:30:23.1038310Z"
+            },
+            {
+                "difficulty": 1,
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 5,
+                "itemType": "Barril",
+                "solved": 1,
+                "durationSeconds": 129.30642700195313,
+                "timestamp": "2026-09-30T19:32:32.4098330Z"
+            }
+        ]
+    },
+    "escenario4": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 70.45263671875,
+        "startedUtc": "2026-09-30T19:32:50.0048590Z",
+        "endedUtc": "2026-09-30T19:34:00.4576050Z",
+        "wrongPlacements": 3,
+        "chipsGrabbed": 20,
+        "chipsReleased": 19,
+        "placements": [
+            {
+                "socket": "cuadrado_rombo",
+                "chip": "cuadrado_circulo",
+                "correct": 0,
+                "timestamp": "2026-09-30T19:33:14.3374270Z"
+            },
+            {
+                "socket": "cuadrado_rombo",
+                "chip": "cuadrado_rombo",
+                "correct": 1,
+                "timestamp": "2026-09-30T19:33:27.5110940Z"
+            },
+            {
+                "socket": "circulo_cuadrado",
+                "chip": "circulo_cuadrado",
+                "correct": 1,
+                "timestamp": "2026-09-30T19:33:42.7202080Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "circulo_rombo",
+                "correct": 0,
+                "timestamp": "2026-09-30T19:33:43.9838770Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "circulo_rombo",
+                "correct": 0,
+                "timestamp": "2026-09-30T19:33:48.7219380Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "triangulo_circulo",
+                "correct": 1,
+                "timestamp": "2026-09-30T19:33:52.1674210Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "cuadrado_trianguloinv",
+                "correct": 1,
+                "timestamp": "2026-09-30T19:34:00.4562850Z"
+            }
+        ]
+    }
