@@ -26,7 +26,9 @@ import server  # noqa: E402
 
 logging.disable(logging.CRITICAL)
 
-SAMPLES = Path(__file__).resolve().parents[2] / "JSON Samples"
+# Sesiones con el formato anterior al 06/10/2026: uploads/ sigue lleno de ellas
+SAMPLES = Path(__file__).resolve().parent / "fixtures"
+CURRENT = Path(__file__).resolve().parents[2] / "JSON Samples"
 VISOR = {"X-API-Key": "clave-visor"}
 BROWSER = {"Accept": "text/html"}
 
@@ -331,6 +333,53 @@ class TablesTest(ServerCase):
         originals = zipfile.ZipFile(io.BytesIO(self.client.get("/exportar/originales.zip").data))
         self.assertEqual(sorted(originals.namelist()), ["0101_5.json", "0102_6.json"])
         self.assertEqual(originals.read("0101_5.json"), sample("0101_1.json"))
+
+
+
+class CurrentFormatTest(ServerCase):
+    """El formato del 06/10/2026: visor en la raíz, banderas booleanas, sin contadores que repitan una lista."""
+
+    def setUp(self):
+        super().setUp()
+        for name in ("0101_5_00000.json", "0102_6_00000.json"):
+            self.put(name, (CURRENT / name).read_bytes())
+        self.login()
+
+    def test_sessions_are_read_without_warnings(self):
+        runs = server.dataset.runs()
+        self.assertEqual([(r.pin, r.device_id, r.session_id, r.scenarios_completed) for r in runs],
+                         [("0101", "00000", 5, 4), ("0102", "00000", 6, 4)])
+        self.assertEqual([r.issues for r in runs], [(), ()])
+
+    def test_tables(self):
+        first = self.rows("sesiones")[0]
+        self.assertEqual((first["file"], first["deviceId"], first["totalSeconds"]), ("0101_5_00000.json", "00000", "300.588"))
+        self.assertEqual((first["e1_blocksConnected"], first["e1_blockResets"], first["e1_errorInvalidUse"]), ("8", "0", "0"))
+        # Lo que este formato ya no trae queda vacío; lo que se quitó por repetir una lista, se cuenta
+        self.assertEqual((first["e1_blocksReleased"], first["e4_chipsReleased"]), ("", ""))
+        self.assertEqual((first["e2_wrongSelections"], first["e4_wrongPlacements"]), ("2", "3"))
+
+        selection = self.rows("selecciones")[0]
+        self.assertEqual((selection["selected"], selection["correct"], selection["durationSeconds"]), ("1", "0", "33.848"))
+        self.assertEqual(self.rows("colocaciones")[0]["durationSeconds"], "18.83")
+        attempt = self.rows("intentos")[0]
+        self.assertEqual((attempt["solved"], attempt["attemptDifficulty"]), ("1", ""))
+        self.assertNotIn("deseleccion", {r["event"] for r in self.rows("eventos")})
+
+    def test_pages_render(self):
+        for path in ("/", "/sesiones", "/sesiones/0101_5_00000", "/escenarios", "/datos", "/exportar/todo.xlsx"):
+            self.assertEqual(self.status(path), 200, path)
+
+    def test_both_formats_live_together(self):
+        self.put("0103_4.json", sample("prueba_real.json"))
+        self.assertEqual(len(self.rows("sesiones")), 3)
+        for path in ("/", "/escenarios", "/datos"):
+            self.assertEqual(self.status(path), 200, path)
+
+    def test_name_must_carry_the_device(self):
+        self.put("0101_5.json", (CURRENT / "0101_5_00000.json").read_bytes())
+        codes = {issue.code for issue in server.dataset.get("0101_5").issues}
+        self.assertEqual(codes, {"nombre_distinto", "duplicada"})
 
 
 if __name__ == "__main__":

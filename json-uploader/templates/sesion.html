@@ -24,6 +24,7 @@
     <h1>PIN {{ run.pin or '(sin PIN)' }} <span class="sub" style="font-size: 16px; font-weight: 400">· sesión {{ run.session_id if run.session_id is not none else '—' }}</span></h1>
     <p class="sub" style="margin-top: 4px">
       <span class="tag">{{ run.difficulty_label }}</span>
+      {% if run.device_id %}<span class="tag" title="Código del visor">Visor {{ run.device_id }}</span>{% endif %}
       {% if run.excluded %}<span class="tag">Excluida del análisis</span>{% endif %}
       {{ run.started_at|dt('%d/%m/%Y, %H:%M:%S') }} · {{ run.seconds|clock }} min ·
       {{ run.scenarios_completed }} de {{ SCENARIOS|length }} escenarios completados
@@ -101,8 +102,8 @@
     <ul class="pairs">
       <li><span>Inicio</span>{{ scenario.started_at|dt('%H:%M:%S') }}</li>
       <li><span>{{ meta.events_label }}</span>{{ rows|length }}</li>
-      {% for key in meta.counters %}
-      <li title="{{ key }}: {{ COUNTER_DOCS[key] }}"><span>{{ COUNTER_LABELS[key] }}</span>{{ scenario.counter(key) if scenario.counter(key) is not none else '—' }}</li>
+      {% for key in meta.counters if scenario.counter(key) is not none %}
+      <li title="{{ key }}: {{ COUNTER_DOCS[key] }}"><span>{{ COUNTER_LABELS[key] }}</span>{{ scenario.counter(key) }}</li>
       {% endfor %}
     </ul>
 
@@ -114,8 +115,8 @@
             <th class="n">#</th>
             <th>Hora</th>
             <th class="n" title="Segundos desde el inicio del escenario">Desde el inicio</th>
+            <th class="n" title="durationSeconds: lo que tardó desde la acción anterior. En los intentos no cuenta la ejecución">Tardó</th>
             {% if meta.events_key == 'attempts' %}
-            <th class="n" title="durationSeconds: lo que tardó en pulsar ejecutar, sin contar la ejecución">Pensó</th>
             {% if number == 3 %}<th class="n">Repeticiones</th><th>Ficha de tipo</th>{% endif %}
             <th>Secuencia</th>
             {% elif meta.events_key == 'selections' %}
@@ -132,8 +133,8 @@
             <td class="n">{{ row.index }}</td>
             <td class="nowrap">{{ row.at|dt('%H:%M:%S') }}</td>
             <td class="n">{{ row.offset|secs }}</td>
-            {% if meta.events_key == 'attempts' %}
             <td class="n">{{ row.event.durationSeconds|secs if row.event.durationSeconds is number else '—' }}</td>
+            {% if meta.events_key == 'attempts' %}
             {% if number == 3 %}
             <td class="n">{{ row.repetitions if row.repetitions is not none else '—' }}</td>
             <td>{{ row.event.itemType or '(sin ficha)' }}</td>

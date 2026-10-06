@@ -1,0 +1,181 @@
+{
+    "pin": "0101",
+    "deviceId": "00000",
+    "sessionId": 5,
+    "difficulty": 1,
+    "startedUtc": "2026-09-30T15:15:47.1021390Z",
+    "endedUtc": "2026-09-30T15:20:47.6902200Z",
+    "totalSeconds": 300.588,
+    "escenario1": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 32.94573211669922,
+        "startedUtc": "2026-09-30T15:16:34.1660780Z",
+        "endedUtc": "2026-09-30T15:17:07.1175070Z",
+        "failedAttempts": 0,
+        "blocksGrabbed": 9,
+        "blocksConnected": 8,
+        "blockResets": 0,
+        "errorCollisionBot": 0,
+        "errorInvalidUse": 0,
+        "attempts": [
+            {
+                "sequence": [
+                    "Avanzar",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Izquierda",
+                    "Avanzar",
+                    "Usar"
+                ],
+                "solved": true,
+                "durationSeconds": 28.702728271484375,
+                "timestamp": "2026-09-30T15:17:02.8676870Z"
+            }
+        ]
+    },
+    "escenario2": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 82.78103637695312,
+        "startedUtc": "2026-09-30T15:17:14.2291630Z",
+        "endedUtc": "2026-09-30T15:18:37.0101980Z",
+        "selections": [
+            {
+                "module": "enfriamiento",
+                "option": "Agregar gasolina",
+                "correct": false,
+                "durationSeconds": 33.848,
+                "timestamp": "2026-09-30T15:17:48.0778130Z"
+            },
+            {
+                "module": "enfriamiento",
+                "option": "Conectar una batería cargada",
+                "correct": false,
+                "durationSeconds": 5.817,
+                "timestamp": "2026-09-30T15:17:53.8940220Z"
+            },
+            {
+                "module": "enfriamiento",
+                "option": "Agregar agua",
+                "correct": true,
+                "durationSeconds": 8.105,
+                "timestamp": "2026-09-30T15:18:01.9996840Z"
+            },
+            {
+                "module": "generadores",
+                "option": "Conectar una batería cargada",
+                "correct": true,
+                "durationSeconds": 20.863,
+                "timestamp": "2026-09-30T15:18:22.8623140Z"
+            },
+            {
+                "module": "motores",
+                "option": "Agregar gasolina",
+                "correct": true,
+                "durationSeconds": 14.147,
+                "timestamp": "2026-09-30T15:18:37.0092540Z"
+            }
+        ]
+    },
+    "escenario3": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 66.07817840576172,
+        "startedUtc": "2026-09-30T15:18:45.5127340Z",
+        "endedUtc": "2026-09-30T15:19:51.5909130Z",
+        "failedAttempts": 0,
+        "blocksGrabbed": 3,
+        "blocksConnected": 2,
+        "errorInvalidCommand": 0,
+        "attempts": [
+            {
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 7,
+                "itemType": "Caja",
+                "solved": false,
+                "durationSeconds": 34.22771072387695,
+                "timestamp": "2026-09-30T15:19:19.7404440Z"
+            },
+            {
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 3,
+                "itemType": "Barril",
+                "solved": true,
+                "durationSeconds": 25.245819091796875,
+                "timestamp": "2026-09-30T15:19:44.9859930Z"
+            }
+        ]
+    },
+    "escenario4": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 40.70558166503906,
+        "startedUtc": "2026-09-30T15:19:59.8743020Z",
+        "endedUtc": "2026-09-30T15:20:40.5798850Z",
+        "chipsGrabbed": 17,
+        "placements": [
+            {
+                "socket": "triangulo_circulo",
+                "chip": "cuadrado_circulo",
+                "correct": false,
+                "durationSeconds": 18.83,
+                "timestamp": "2026-09-30T15:20:18.7048380Z"
+            },
+            {
+                "socket": "cuadrado_rombo",
+                "chip": "cuadrado_rombo",
+                "correct": true,
+                "durationSeconds": 7.925,
+                "timestamp": "2026-09-30T15:20:26.6298770Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "triangulo_cuadrado",
+                "correct": false,
+                "durationSeconds": 4.117,
+                "timestamp": "2026-09-30T15:20:30.7467600Z"
+            },
+            {
+                "socket": "circulo_cuadrado",
+                "chip": "circulo_cuadrado",
+                "correct": true,
+                "durationSeconds": 3.976,
+                "timestamp": "2026-09-30T15:20:34.7229260Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "cuadrado_trianguloinv",
+                "correct": true,
+                "durationSeconds": 1.469,
+                "timestamp": "2026-09-30T15:20:36.1913280Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "circulo_rombo",
+                "correct": false,
+                "durationSeconds": 2.624,
+                "timestamp": "2026-09-30T15:20:38.8152380Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "triangulo_circulo",
+                "correct": true,
+                "durationSeconds": 1.763,
+                "timestamp": "2026-09-30T15:20:40.5789130Z"
+            }
+        ]
+    }
+}

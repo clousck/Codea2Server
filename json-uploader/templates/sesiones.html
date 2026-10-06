@@ -35,6 +35,7 @@
           {% if can_edit %}<th>En el análisis</th>{% endif %}
           <th><button class="sort" type="button">PIN</button></th>
           <th class="n"><button class="sort" type="button">Sesión</button></th>
+          <th><button class="sort" type="button">Visor</button></th>
           <th><button class="sort" type="button">Dificultad</button></th>
           <th><button class="sort" type="button">Inicio</button></th>
           <th class="n"><button class="sort" type="button">Duración</button></th>
@@ -52,9 +53,10 @@
           <td data-v="{{ run.pin }}">
             <a href="{{ url_for('sesion', run_id=run.id, **filters.query()) }}"><strong>{{ run.pin or '(sin PIN)' }}</strong></a>
             {# El nombre solo se enseña cuando no es el que tocaría por PIN y sesión: ahí es lo único que la distingue #}
-            {% if run.file.name != run.pin ~ '_' ~ run.session_id ~ '.json' %}<div class="sub mono">{{ run.file.name }}</div>{% endif %}
+            {% if run.file.name != run.expected_name %}<div class="sub mono">{{ run.file.name }}</div>{% endif %}
           </td>
           <td class="n">{{ run.session_id if run.session_id is not none else '—' }}</td>
+          <td class="mono">{{ run.device_id or '—' }}</td>
           <td>{{ run.difficulty_label }}</td>
           <td class="nowrap" data-v="{{ run.started_at.isoformat() if run.started_at else '' }}">{{ run.started_at|dt }}</td>
           <td class="n" data-v="{{ run.seconds if run.seconds is not none else '' }}">{{ run.seconds|clock }}</td>

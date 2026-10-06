@@ -8,7 +8,7 @@ lo que huele a cable olvidado. Son avisos y no errores: un cero puede ser legít
 from collections import defaultdict
 from datetime import timedelta
 
-from .model import Issue, as_flag, parse_utc
+from .model import Issue, as_flag, as_int, is_selected, parse_utc
 
 # Margen para dar un evento por posterior al fin de su escenario. Hacia el inicio no hay
 # margen: el reto se abre antes de la narración, así que un evento anterior, aunque sea
@@ -28,11 +28,8 @@ def check_run(run):
     if run.file.status == "repaired":
         add("json_cortado", "El JSON estaba cortado y se recuperó cerrando las estructuras abiertas: "
                             "puede faltar el final de la sesión.")
-    if run.pin and run.session_id is not None:
-        expected = f"{run.pin}_{run.session_id}.json"
-        if run.file.name != expected:
-            add("nombre_distinto", f"El nombre del archivo no coincide con su contenido: "
-                                   f"por pin y sessionId sería {expected}.")
+    if run.pin and run.session_id is not None and run.file.name != run.expected_name:
+        add("nombre_distinto", f"El nombre del archivo no coincide con su contenido: sería {run.expected_name}.")
     if run.difficulty not in (1, 2):
         add("dificultad", f"Dificultad desconocida ({run.raw.get('difficulty')!r}): se esperaba 1 o 2.")
     if run.started_at is None:
@@ -102,12 +99,12 @@ def _check_scenario(run, number, scenario, add):
 
 def _check_counters(scenario, number, events, add):
     def mismatch(key, counted, what):
-        stored = scenario.counter(key)
+        stored = as_int(scenario.raw.get(key))
         if stored is not None and stored != counted:
             add("contador", f"{key} vale {stored}, pero en la lista hay {counted} {what}.", number)
 
     if number == 2:
-        wrong = sum(1 for e in events if as_flag(e.get("selected")) and not as_flag(e.get("correct")))
+        wrong = sum(1 for e in events if is_selected(e) and not as_flag(e.get("correct")))
         mismatch("wrongSelections", wrong, "selección(es) incorrecta(s)")
     elif number == 4:
         wrong = sum(1 for e in events if not as_flag(e.get("correct")))
@@ -135,7 +132,7 @@ def cross_checks(runs):
     by_identity = defaultdict(list)
     for run in runs:
         if run.pin and run.session_id is not None:
-            by_identity[(run.pin, run.session_id)].append(run)
+            by_identity[(run.pin, run.session_id, run.device_id)].append(run)
 
     for group in by_identity.values():
         if len(group) < 2:

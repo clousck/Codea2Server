@@ -47,17 +47,23 @@ class ScenarioMeta:
         return f"E{self.number}"
 
 
-_BLOCK_COUNTERS = ("failedAttempts", "blocksGrabbed", "blocksReleased",
-                   "errorCollisionBot", "errorIncompleteSequence", "errorInvalidCommand")
+# El formato cambió el 06/10/2026 y en uploads/ conviven los dos. Cada escenario lista primero
+# sus contadores de hoy y después los que solo traen los JSON anteriores; el que un archivo
+# no trae queda vacío. wrongSelections y wrongPlacements ya no vienen: se cuentan de la lista.
+_LEGACY = ("blocksReleased", "errorIncompleteSequence")
 
 # En el escenario 3 los intentos fallidos casi no ocurren por diseño (solo falla la pasada
 # que no clasifica nada): lo que distingue a un niño de otro son los comandos inválidos.
 SCENARIOS = {
-    1: ScenarioMeta(1, "Secuencialidad", "attempts", "Intentos", _BLOCK_COUNTERS,
+    1: ScenarioMeta(1, "Secuencialidad", "attempts", "Intentos",
+                    ("failedAttempts", "blocksGrabbed", "blocksConnected", "blockResets",
+                     "errorCollisionBot", "errorInvalidUse", *_LEGACY, "errorInvalidCommand"),
                     "failedAttempts", "intentos fallidos"),
     2: ScenarioMeta(2, "Condicionales", "selections", "Selecciones", ("wrongSelections",),
                     "wrongSelections", "selecciones incorrectas"),
-    3: ScenarioMeta(3, "Bucles", "attempts", "Ejecuciones", _BLOCK_COUNTERS,
+    3: ScenarioMeta(3, "Bucles", "attempts", "Ejecuciones",
+                    ("failedAttempts", "blocksGrabbed", "blocksConnected", "errorInvalidCommand",
+                     *_LEGACY, "errorCollisionBot"),
                     "errorInvalidCommand", "comandos inválidos"),
     4: ScenarioMeta(4, "Patrones", "placements", "Colocaciones",
                     ("wrongPlacements", "chipsGrabbed", "chipsReleased"),
@@ -96,6 +102,11 @@ def as_flag(value):
     if isinstance(value, str):
         return value.strip().lower() in ("1", "true")
     return bool(value)
+
+
+def is_selected(event):
+    """Si la pulsación marcó la opción. Desde el 06/10/2026 solo se registran las que marcan."""
+    return as_flag(event.get("selected", True))
 
 
 def as_int(value):
@@ -156,6 +167,11 @@ class Scenario:
         return seconds_between(self.started_at, self.ended_at)
 
     def counter(self, key):
+        if key not in self.raw and self.present:
+            if key == "wrongSelections":
+                return sum(1 for e in self.events if is_selected(e) and not as_flag(e.get("correct")))
+            if key == "wrongPlacements":
+                return sum(1 for e in self.events if not as_flag(e.get("correct")))
         return as_int(self.raw.get(key))
 
     @property
@@ -171,6 +187,7 @@ class Scenario:
 class Run:
     file: StoredFile
     pin: str
+    device_id: str
     session_id: int | None
     difficulty: int | None
     started_at: datetime | None
@@ -189,6 +206,12 @@ class Run:
         return self.file.data
 
     @property
+    def expected_name(self):
+        """El nombre con el que el visor sube esta sesión; lleva el visor desde el 06/10/2026."""
+        parts = [self.pin, str(self.session_id)] + ([self.device_id] if self.device_id else [])
+        return "_".join(parts) + ".json"
+
+    @property
     def difficulty_label(self):
         return DIFFICULTIES.get(self.difficulty, "Desconocida")
 
@@ -202,8 +225,12 @@ class Run:
 
     @property
     def seconds(self):
-        """Duración de la sesión entera: incluye narración y traslados entre salas."""
-        return seconds_between(self.started_at, self.ended_at)
+        """Duración de la sesión entera: incluye narración y traslados entre salas.
+
+        Sin cierre, vale el totalSeconds de la raíz: el visor lo va actualizando en cada guardado.
+        """
+        clock = seconds_between(self.started_at, self.ended_at)
+        return clock if clock is not None else as_float(self.raw.get("totalSeconds"))
 
     @property
     def challenge_seconds(self):
@@ -246,6 +273,7 @@ def build_run(file):
     return Run(
         file=file,
         pin="" if pin is None else str(pin),
+        device_id=str(data.get("deviceId") or ""),
         session_id=as_int(data.get("sessionId")),
         difficulty=as_int(data.get("difficulty")),
         started_at=parse_utc(data.get("startedUtc")),

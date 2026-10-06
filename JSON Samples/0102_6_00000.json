@@ -1,0 +1,174 @@
+{
+    "pin": "0102",
+    "deviceId": "00000",
+    "sessionId": 6,
+    "difficulty": 1,
+    "startedUtc": "2026-09-30T15:21:08.6328650Z",
+    "endedUtc": "2026-09-30T15:25:06.8263990Z",
+    "totalSeconds": 238.194,
+    "escenario1": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 19.133148193359375,
+        "startedUtc": "2026-09-30T15:21:53.9084760Z",
+        "endedUtc": "2026-09-30T15:22:13.0479750Z",
+        "failedAttempts": 0,
+        "blocksGrabbed": 10,
+        "blocksConnected": 8,
+        "blockResets": 0,
+        "errorCollisionBot": 0,
+        "errorInvalidUse": 0,
+        "attempts": [
+            {
+                "sequence": [
+                    "Avanzar",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Derecha",
+                    "Avanzar 2",
+                    "Girar Izquierda",
+                    "Avanzar",
+                    "Usar"
+                ],
+                "solved": true,
+                "durationSeconds": 14.875640869140625,
+                "timestamp": "2026-09-30T15:22:08.7838320Z"
+            }
+        ]
+    },
+    "escenario2": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 35.303749084472656,
+        "startedUtc": "2026-09-30T15:22:20.3168540Z",
+        "endedUtc": "2026-09-30T15:22:55.6206020Z",
+        "selections": [
+            {
+                "module": "enfriamiento",
+                "option": "Agregar agua",
+                "correct": true,
+                "durationSeconds": 23.182,
+                "timestamp": "2026-09-30T15:22:43.4989030Z"
+            },
+            {
+                "module": "generadores",
+                "option": "Conectar una batería cargada",
+                "correct": true,
+                "durationSeconds": 6.383,
+                "timestamp": "2026-09-30T15:22:49.8817800Z"
+            },
+            {
+                "module": "motores",
+                "option": "Agregar gasolina",
+                "correct": true,
+                "durationSeconds": 5.738,
+                "timestamp": "2026-09-30T15:22:55.6197670Z"
+            }
+        ]
+    },
+    "escenario3": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 61.88273239135742,
+        "startedUtc": "2026-09-30T15:23:04.1052910Z",
+        "endedUtc": "2026-09-30T15:24:05.9880220Z",
+        "failedAttempts": 0,
+        "blocksGrabbed": 11,
+        "blocksConnected": 2,
+        "errorInvalidCommand": 0,
+        "attempts": [
+            {
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 7,
+                "itemType": "Caja",
+                "solved": false,
+                "durationSeconds": 32.24885940551758,
+                "timestamp": "2026-09-30T15:23:36.3541500Z"
+            },
+            {
+                "sequence": [
+                    "Recoger",
+                    "Girar al destino",
+                    "Soltar",
+                    "Volver"
+                ],
+                "repetitions": 3,
+                "itemType": "Barril",
+                "solved": true,
+                "durationSeconds": 22.9830322265625,
+                "timestamp": "2026-09-30T15:23:59.3581900Z"
+            }
+        ]
+    },
+    "escenario4": {
+        "started": true,
+        "completed": true,
+        "totalSeconds": 45.456417083740234,
+        "startedUtc": "2026-09-30T15:24:14.2617380Z",
+        "endedUtc": "2026-09-30T15:24:59.7181540Z",
+        "chipsGrabbed": 17,
+        "placements": [
+            {
+                "socket": "cuadrado_rombo",
+                "chip": "cuadrado_rombo",
+                "correct": true,
+                "durationSeconds": 18.425,
+                "timestamp": "2026-09-30T15:24:32.6868840Z"
+            },
+            {
+                "socket": "circulo_cuadrado",
+                "chip": "circulo_cuadrado",
+                "correct": true,
+                "durationSeconds": 4.778,
+                "timestamp": "2026-09-30T15:24:37.4647900Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "cuadrado_circulo",
+                "correct": false,
+                "durationSeconds": 1.406,
+                "timestamp": "2026-09-30T15:24:38.8706970Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "cuadrado_circulo",
+                "correct": false,
+                "durationSeconds": 2.888,
+                "timestamp": "2026-09-30T15:24:41.7581860Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "cuadrado_circulo",
+                "correct": false,
+                "durationSeconds": 2.446,
+                "timestamp": "2026-09-30T15:24:44.2040570Z"
+            },
+            {
+                "socket": "cuadrado_trianguloinv",
+                "chip": "cuadrado_trianguloinv",
+                "correct": true,
+                "durationSeconds": 6.495,
+                "timestamp": "2026-09-30T15:24:50.6991970Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "circulo_rombo",
+                "correct": false,
+                "durationSeconds": 1.847,
+                "timestamp": "2026-09-30T15:24:52.5469550Z"
+            },
+            {
+                "socket": "triangulo_circulo",
+                "chip": "triangulo_circulo",
+                "correct": true,
+                "durationSeconds": 7.171,
+                "timestamp": "2026-09-30T15:24:59.7171780Z"
+            }
+        ]
+    }
+}

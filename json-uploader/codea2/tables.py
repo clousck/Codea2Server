@@ -8,7 +8,7 @@ cruzarlos con la documentación de variables del proyecto. Las banderas van toda
 from dataclasses import dataclass
 from datetime import datetime
 
-from .model import SCENARIOS, ZONE, as_flag, as_float, as_int, parse_utc, seconds_between
+from .model import SCENARIOS, ZONE, as_flag, as_float, as_int, is_selected, parse_utc, seconds_between
 
 SEQUENCE_SEPARATOR = " > "
 
@@ -45,6 +45,7 @@ _ZONE_NAME = getattr(ZONE, "key", None) or str(ZONE)
 KEYS = (
     Column("file", "text", "Archivo JSON de la sesión. Es la clave que une todas las tablas"),
     Column("pin", "text", "PIN del participante. Es texto: conserva los ceros a la izquierda"),
+    Column("deviceId", "text", "Código del visor (5 caracteres). Vacío en los JSON anteriores al 06/10/2026"),
     Column("sessionId", "int", "Contador de sesión del visor"),
     Column("difficulty", "int", "Dificultad de la sesión: 1 = básica, 2 = intermedia"),
 )
@@ -52,21 +53,28 @@ KEYS = (
 COUNTER_DOCS = {
     "failedAttempts": "intentos fallidos que registró el juego",
     "blocksGrabbed": "veces que agarró un bloque",
-    "blocksReleased": "veces que soltó un bloque",
-    "errorCollisionBot": "errores de lógica por movimiento inválido en la rejilla (choque)",
-    "errorIncompleteSequence": "errores de lógica por secuencia incompleta (hoy siempre 0: sin definición operativa)",
-    "errorInvalidCommand": "errores de lógica por comando inválido",
-    "wrongSelections": "opciones incorrectas que seleccionó",
-    "wrongPlacements": "fichas colocadas en un hueco que no era el suyo",
+    "blocksConnected": "veces que encajó un bloque en un hueco",
+    "blockResets": "veces que pulsó el reinicio de bloques",
+    "blocksReleased": "veces que soltó un bloque (solo en los JSON anteriores al 06/10/2026)",
+    "errorCollisionBot": "errores de lógica por salirse de la rejilla o chocar",
+    "errorInvalidUse": "errores de lógica por usar donde no hay nada",
+    "errorIncompleteSequence": "errores de lógica por secuencia incompleta (solo en los JSON anteriores; siempre 0)",
+    "errorInvalidCommand": "errores de lógica por comando inválido. En el escenario 1, solo en los JSON "
+                           "anteriores, donde incluía el uso inválido",
+    "wrongSelections": "opciones incorrectas que seleccionó. Si el JSON no lo trae, se cuenta de la lista",
+    "wrongPlacements": "fichas colocadas en un hueco que no era el suyo. Si el JSON no lo trae, se cuenta de la lista",
     "chipsGrabbed": "veces que agarró una ficha",
-    "chipsReleased": "veces que soltó una ficha",
+    "chipsReleased": "veces que soltó una ficha (solo en los JSON anteriores al 06/10/2026)",
 }
 
 # Nombre corto de cada contador, para rótulos del panel
 COUNTER_LABELS = {
     "failedAttempts": "Intentos fallidos",
     "blocksGrabbed": "Bloques agarrados",
+    "blocksConnected": "Bloques conectados",
+    "blockResets": "Reinicios de bloques",
     "blocksReleased": "Bloques soltados",
+    "errorInvalidUse": "Usos inválidos",
     "errorCollisionBot": "Choques",
     "errorIncompleteSequence": "Secuencias incompletas",
     "errorInvalidCommand": "Comandos inválidos",
@@ -77,14 +85,15 @@ COUNTER_LABELS = {
 }
 
 _SCENARIO_BASE = ("started", "completed", "totalSeconds", "startedUtc", "endedUtc")
-_RUN_KNOWN = ("pin", "sessionId", "difficulty", "startedUtc", "endedUtc")
+_RUN_KNOWN = ("pin", "deviceId", "sessionId", "difficulty", "startedUtc", "endedUtc", "totalSeconds")
 _ATTEMPT_KNOWN = ("difficulty", "sequence", "repetitions", "itemType", "solved", "durationSeconds", "timestamp")
-_SELECTION_KNOWN = ("module", "option", "selected", "correct", "timestamp")
-_PLACEMENT_KNOWN = ("socket", "chip", "correct", "timestamp")
+_SELECTION_KNOWN = ("module", "option", "selected", "correct", "durationSeconds", "timestamp")
+_PLACEMENT_KNOWN = ("socket", "chip", "correct", "durationSeconds", "timestamp")
 
 
 def _keys(run):
-    return {"file": run.file.name, "pin": run.pin, "sessionId": run.session_id, "difficulty": run.difficulty}
+    return {"file": run.file.name, "pin": run.pin, "deviceId": run.device_id, "sessionId": run.session_id,
+            "difficulty": run.difficulty}
 
 
 def _local(moment):
@@ -138,6 +147,8 @@ def _session_columns():
         Column("startedLocal", "local", f"Inicio de la sesión en hora local ({_ZONE_NAME})"),
         Column("date", "date", "Fecha local de la sesión"),
         Column("sessionSeconds", "float", "Segundos entre startedUtc y endedUtc. Incluye narración y traslados"),
+        Column("totalSeconds", "float", "Duración de la sesión según el visor. Si no se cerró, llega hasta el "
+                                        "último guardado. Vacío en los JSON anteriores al 06/10/2026"),
         Column("challengeSeconds", "float", "Suma de totalSeconds de los escenarios iniciados"),
         Column("scenariosStarted", "int", "Escenarios iniciados (0 a 4)"),
         Column("scenariosCompleted", "int", "Escenarios completados (0 a 4)"),
@@ -180,7 +191,8 @@ def sessions_table(runs):
             "endedUtc": run.raw.get("endedUtc"),
             "startedLocal": _local(run.started_at),
             "date": run.local_date,
-            "sessionSeconds": run.seconds,
+            "sessionSeconds": seconds_between(run.started_at, run.ended_at),
+            "totalSeconds": as_float(run.raw.get("totalSeconds")),
             "challengeSeconds": run.challenge_seconds,
             "scenariosStarted": run.scenarios_started,
             "scenariosCompleted": run.scenarios_completed,
@@ -200,7 +212,7 @@ def sessions_table(runs):
                 durations = [as_float(e.get("durationSeconds")) for e in scenario.events]
                 row[prefix + "thinkSeconds"] = sum(d for d in durations if d is not None)
             if meta.events_key == "selections":
-                row[prefix + "deselections"] = sum(1 for e in scenario.events if not as_flag(e.get("selected")))
+                row[prefix + "deselections"] = sum(1 for e in scenario.events if not is_selected(e))
         _with_extras(row, run.raw, extras)
         row.update({
             "issues": len(run.issues),
@@ -287,7 +299,8 @@ def attempts_table(runs):
         Column("scenario", "int", "Escenario del intento: 1 (secuencialidad) o 3 (bucles)"),
         Column("scenarioName", "text", "Pilar que trabaja el escenario"),
         Column("attempt", "int", "Número de intento dentro del escenario, desde 1"),
-        Column("attemptDifficulty", "int", "Dificultad que el juego anotó en el intento"),
+        Column("attemptDifficulty", "int", "Dificultad que el juego anotó en el intento (solo en los JSON "
+                                           "anteriores al 06/10/2026)"),
         Column("sequence", "text", f"Bloques del programa en orden, separados por '{SEQUENCE_SEPARATOR.strip()}'"),
         Column("sequenceLength", "int", "Número de bloques de la secuencia"),
         Column("repetitions", "int", "Repeticiones del bucle. Solo en el escenario 3"),
@@ -352,8 +365,11 @@ def selections_table(runs):
         Column("order", "int", "Orden de la pulsación dentro del escenario, desde 1"),
         Column("module", "text", "Módulo averiado: motores, generadores o enfriamiento"),
         Column("option", "text", "Texto de la opción pulsada"),
-        Column("selected", "flag", "1 si la marcó, 0 si la quitó (autocorrección)"),
+        Column("selected", "flag", "1 si la marcó, 0 si la quitó. Desde el 06/10/2026 solo se registran las "
+                                   "que marcan: siempre 1"),
         Column("correct", "flag", "1 si la opción es una de las correctas del módulo"),
+        Column("durationSeconds", "float", "Segundos desde la selección anterior (o desde el inicio del "
+                                           "escenario). Vacío en los JSON anteriores al 06/10/2026"),
         Column("timestamp", "utc", "Momento de la pulsación (UTC)"),
         Column("secondsFromScenarioStart", "float", "Segundos desde el inicio del escenario"),
         *extras,
@@ -365,8 +381,9 @@ def selections_table(runs):
             "order": index,
             "module": event.get("module"),
             "option": event.get("option"),
-            "selected": as_flag(event.get("selected")),
+            "selected": is_selected(event),
             "correct": as_flag(event.get("correct")),
+            "durationSeconds": as_float(event.get("durationSeconds")),
             "timestamp": event.get("timestamp"),
             "secondsFromScenarioStart": scenario.offset(event),
         })
@@ -386,6 +403,8 @@ def placements_table(runs):
         Column("socket", "text", "Figura que esperaba el hueco"),
         Column("chip", "text", "Figura de la ficha colocada"),
         Column("correct", "flag", "1 si la ficha era la del hueco"),
+        Column("durationSeconds", "float", "Segundos desde la colocación anterior (o desde el inicio del "
+                                           "escenario). Vacío en los JSON anteriores al 06/10/2026"),
         Column("timestamp", "utc", "Momento de la colocación (UTC)"),
         Column("secondsFromScenarioStart", "float", "Segundos desde el inicio del escenario"),
         *extras,
@@ -398,6 +417,7 @@ def placements_table(runs):
             "socket": event.get("socket"),
             "chip": event.get("chip"),
             "correct": as_flag(event.get("correct")),
+            "durationSeconds": as_float(event.get("durationSeconds")),
             "timestamp": event.get("timestamp"),
             "secondsFromScenarioStart": scenario.offset(event),
         })
@@ -438,7 +458,7 @@ def run_events(run):
             if scenario.meta.events_key == "attempts":
                 add(stamp, number, "intento", _describe_attempt(event), as_flag(event.get("solved")))
             elif scenario.meta.events_key == "selections":
-                kind = "seleccion" if as_flag(event.get("selected")) else "deseleccion"
+                kind = "seleccion" if is_selected(event) else "deseleccion"
                 add(stamp, number, kind, f"{event.get('module')}: {event.get('option')}",
                     as_flag(event.get("correct")))
             else:

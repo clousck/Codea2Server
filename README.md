@@ -72,7 +72,7 @@ descargas**. En PIN se pueden poner varios, comodines y descartes: `0101 02* -00
 
 ## Las tablas
 
-Todas llevan `file`, `pin`, `sessionId` y `difficulty`. `file` es la clave que las une.
+Todas llevan `file`, `pin`, `deviceId`, `sessionId` y `difficulty`. `file` es la clave que las une.
 
 | Tabla | Una fila por… |
 |---|---|
@@ -92,6 +92,12 @@ Todas llevan `file`, `pin`, `sessionId` y `difficulty`. `file` es la clave que l
 - Los tiempos van en segundos, redondeados a milésimas.
 - `pin` es texto. Para Excel, descargar el **.xlsx**: al abrir un CSV, Excel convierte `0101` en `101`.
 - Si un APK nuevo añade campos al JSON, aparecen solos al final de su tabla.
+- **Conviven dos formatos de JSON** (el del visor cambió el 06/10/2026) y las tablas los juntan.
+  Lo que un formato no trae queda vacío: `deviceId`, `totalSeconds` de la sesión,
+  `blocksConnected`, `blockResets`, `errorInvalidUse` y el `durationSeconds` de selecciones y
+  colocaciones solo existen en el nuevo; `blocksReleased`, `chipsReleased` y las deselecciones,
+  solo en el anterior. `wrongSelections` y `wrongPlacements` ya no vienen en el JSON: se cuentan
+  de la lista, así que la columna está completa en los dos.
 
 Para descargar desde un script, autenticación básica con la contraseña del panel:
 
@@ -113,9 +119,9 @@ mal capturado, sesión por sesión. Son avisos, no errores: un cero puede ser le
 | Aviso | Qué significa |
 |---|---|
 | `json_cortado` | Al JSON le faltaba el final y se recuperó lo que había |
-| `nombre_distinto` | El archivo no se llama `{pin}_{sessionId}.json` |
+| `nombre_distinto` | El archivo no se llama `{pin}_{sessionId}_{deviceId}.json` (o `{pin}_{sessionId}.json` en el formato anterior) |
 | `duplicada` | Otro archivo trae la misma sesión: cuenta doble mientras no se excluya una |
-| `pin_repetido` | Mismo PIN y contador que otro archivo, pero otra hora de inicio: dos visores |
+| `pin_repetido` | Mismo PIN, contador y visor que otro archivo, pero otra hora de inicio |
 | `sin_cierre` | La run no se cerró (`endedUtc` vacío) |
 | `evento_antes` | Un evento anterior al inicio de su escenario: el reto se abrió tarde y `totalSeconds` se queda corto |
 | `tiempo_distinto` | `totalSeconds` y el reloj difieren en más de 2 s |
@@ -130,17 +136,17 @@ El contrato con el visor no cambió:
 
 ```
 POST /upload        cabecera X-API-Key, multipart con el campo "file"
-  200 {"status": "ok", "saved_as": "0101_5.json"}
+  200 {"status": "ok", "saved_as": "0101_5_A1B2C.json"}
   400 {"error": "..."}      401 sin clave o con una clave mala
 GET  /health        200 {"status": "alive"}
 ```
 
-Se guarda con el nombre que manda el visor, `{pin}_{sessionId}.json`. Dos cosas nuevas, para no
-perder datos nunca:
+Se guarda con el nombre que manda el visor, `{pin}_{sessionId}_{deviceId}.json`. Dos
+protecciones, para no perder datos nunca:
 
-- **Otra sesión con el mismo nombre no se pisa.** `sessionId` es un contador de cada visor: dos
-  visores con el mismo PIN pueden mandar el mismo nombre. Si lo guardado es otra sesión (otro
-  `startedUtc`), la nueva se guarda como `0101_5-2.json` y el panel avisa.
+- **Otra sesión con el mismo nombre no se pisa.** El `deviceId` ya distingue a los visores, pero
+  si aun así lo guardado es otra sesión (otro `startedUtc`), la nueva se guarda con sufijo
+  (`0101_5_A1B2C-2.json`) y el panel avisa.
 - **Resubir la misma sesión conserva la versión anterior** en `uploads/.versiones/`.
 
 Dentro de `uploads/` el panel solo escribe eso y `.codea2-panel.json` (sesiones excluidas y notas).
@@ -185,6 +191,7 @@ json-uploader/
   codea2/exports.py       CSV, JSON, Excel y ZIP
   templates/, static/     el panel (sin dependencias externas ni CDN)
   tests/                  pruebas
-JSON Samples/             sesiones de ejemplo; las usan las pruebas
+JSON Samples/             sesiones de ejemplo con el formato actual; las usan las pruebas
+                          (las del formato anterior están en json-uploader/tests/fixtures/)
 uploads/                  los JSON subidos (volumen del contenedor)
 ```

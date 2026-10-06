@@ -4,7 +4,7 @@ import math
 import statistics
 from collections import Counter, defaultdict
 
-from .model import DIFFICULTIES, SCENARIOS, as_flag, as_int, parse_utc, seconds_between
+from .model import DIFFICULTIES, SCENARIOS, as_flag, as_int, is_selected, parse_utc, seconds_between
 from .tables import COUNTER_DOCS, COUNTER_LABELS, run_events
 
 _TIME_STEPS = (5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200)
@@ -210,8 +210,10 @@ def _counters(meta, scenarios):
     rows = [{"key": meta.events_key, "label": meta.events_label, "doc": f"Número de {meta.events_label.lower()}",
              "stats": describe(len(s.events) for s in scenarios)}]
     for key in meta.counters:
-        rows.append({"key": key, "label": COUNTER_LABELS[key], "doc": COUNTER_DOCS[key],
-                     "stats": describe(s.counter(key) for s in scenarios)})
+        stats = describe(s.counter(key) for s in scenarios)
+        # Un contador que ninguna sesión del recorte trae es de otro formato: no se enseña
+        if stats["n"]:
+            rows.append({"key": key, "label": COUNTER_LABELS[key], "doc": COUNTER_DOCS[key], "stats": stats})
     return rows
 
 
@@ -281,7 +283,7 @@ def scenario_2(runs):
             touched.add(module)
             if as_flag(event.get("correct")):
                 correct.add((module, option))
-            if as_flag(event.get("selected")):
+            if is_selected(event):
                 picks[(module, option)] += 1
                 modules[module]["selections"] += 1
                 if not as_flag(event.get("correct")):
@@ -417,7 +419,7 @@ def scenario_detail(scenario):
             "event": event,
             "blocks": [str(b) for b in blocks] if isinstance(blocks, list) else [],
             "solved": as_flag(event.get("solved")),
-            "selected": as_flag(event.get("selected")),
+            "selected": is_selected(event),
             "correct": as_flag(event.get("correct")),
             "repetitions": as_int(event.get("repetitions")),
         })
