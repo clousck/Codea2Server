@@ -28,7 +28,11 @@ TITLES = {
 }
 
 # Avisos que ponen en duda el cronómetro de un escenario
-_TIME_ISSUES = {"evento_antes", "evento_despues", "tiempo_distinto"}
+_TIME_ISSUES = {
+    "evento_antes": "hay un evento anterior al inicio del reto",
+    "evento_despues": "hay un evento posterior al fin del reto",
+    "tiempo_distinto": "totalSeconds no coincide con el reloj",
+}
 
 # El escenario 2 tiene siempre los mismos tres módulos
 _MODULES = 3
@@ -66,7 +70,7 @@ def scenario_metrics(run, number):
     scenario = run.scenarios[number]
     closure = run.sheet.get("closure", "")
     row = dict.fromkeys(("G", "N", "F", "PF", "K", "A", "M", "P1", "C", "pairs", "pairsExcluded",
-                         "unsolved", "seconds"))
+                         "unsolved", "seconds", "recorded"))
     row.update(run=run, number=number, started=scenario.started, gWhy="", timeWhy="",
                timedOut=scenario.timed_out if "timedOut" in scenario.raw else None)
 
@@ -87,14 +91,16 @@ def scenario_metrics(run, number):
 
     # MC2 · tiempo registrado, solo con el cronómetro sin avisos
     codes = {issue.code for issue in run.issues if issue.scenario == number}
+    # Lo que registró la aplicación se enseña siempre; a MC2 solo pasa si es fiable
+    row["recorded"] = scenario.total_seconds if scenario.started else None
     if not scenario.started:
         row["timeWhy"] = "no iniciado"
     elif not scenario.completed:
         row["timeWhy"] = "tiempo agotado" if scenario.timed_out else "no completado"
     elif not scenario.total_seconds:
         row["timeWhy"] = "sin tiempo registrado"
-    elif codes & _TIME_ISSUES:
-        row["timeWhy"] = "cronómetro sin validar"
+    elif codes & _TIME_ISSUES.keys():
+        row["timeWhy"] = "sin validar: " + "; ".join(why for code, why in _TIME_ISSUES.items() if code in codes)
     else:
         row["seconds"] = scenario.total_seconds
 
@@ -241,7 +247,8 @@ def scenario_summary(runs, number):
     done = sum(r["G"] for r in evaluable)
     excluded = Counter(r["gWhy"] for r in rows if r["G"] is None)
     times = describe(r["seconds"] for r in rows)
-    untimed = Counter(r["timeWhy"] for r in rows if r["seconds"] is None and r["timeWhy"] != "no iniciado")
+    untimed = Counter(r["timeWhy"].split(":")[0] for r in rows
+                      if r["seconds"] is None and r["timeWhy"] != "no iniciado")
 
     cards = [
         _card("MC1", "Logro final", _pct(_percent(done, len(evaluable))),
@@ -378,6 +385,7 @@ def analysis_table(runs):
         Column("G_excluded", "text", "Por qué G no es evaluable: no iniciado, interrupción técnica o sin cierre confirmado"),
         Column("totalSeconds", "float", "MC2 · Tiempo registrado por la aplicación, solo si se completó y su cronómetro no tiene avisos"),
         Column("time_excluded", "text", "Por qué el tiempo no entra en MC2"),
+        Column("recordedSeconds", "float", "totalSeconds del escenario tal como viene en el JSON, entre o no en MC2"),
         Column("N", "int", "Eventos evaluables: intentos (E1), selecciones (E2), ejecuciones (E3) o colocaciones (E4)"),
         Column("F", "int", "Eventos incorrectos. Vacío en el escenario 3, donde no está definido"),
         Column("errorPct", "float", "100 × F / N. Vacío si N es cero o en el escenario 3"),
@@ -405,6 +413,7 @@ def analysis_table(runs):
                 "scenario": number, "scenarioName": TITLES[number][0],
                 "G": m["G"], "timedOut": m["timedOut"], "G_excluded": m["gWhy"],
                 "totalSeconds": m["seconds"], "time_excluded": m["timeWhy"] if m["seconds"] is None else "",
+                "recordedSeconds": m["recorded"],
                 "N": m["N"], "F": m["F"], "errorPct": m["PF"], "K": m["K"], "unsolved": m["unsolved"],
                 "firstCorrect": m["A"], "firstObserved": m["M"], "firstPct": m["P1"],
                 "planChanges": m["C"], "pairsEvaluable": m["pairs"], "pairsExcluded": m["pairsExcluded"],

@@ -110,7 +110,7 @@
       {% if m.F is not none %}<li><span>F · incorrectos</span>{{ m.F }}{% if m.PF is not none %} ({{ m.PF|num }} %){% endif %}</li>{% endif %}
       {% if m.M is not none %}<li><span>Primer acierto</span>{{ m.A }} de {{ m.M }}{% if m.P1 is not none %} ({{ m.P1|num }} %){% endif %}</li>{% endif %}
       {% if number == 3 %}<li><span>C · cambios del plan</span>{{ m.C if m.C is not none else 'sin dato' }}</li>{% endif %}
-      {% if m.timeWhy and scenario.started %}<li><span>Tiempo fuera de MC2</span>{{ m.timeWhy }}</li>{% endif %}
+      {% if scenario.started %}<li><span>Tiempo registrado</span>{{ m.recorded|secs }}{% if m.timeWhy %} · fuera de MC2 ({{ m.timeWhy }}){% endif %}</li>{% endif %}
     </ul>
     <ul class="pairs">
       <li><span>Inicio</span>{{ scenario.started_at|dt('%H:%M:%S') }}</li>

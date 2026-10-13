@@ -76,6 +76,7 @@
 
   <details class="table-view"{% if not summary.breakdown %} style="margin-top: 0"{% endif %}>
     <summary>Ver sesión por sesión</summary>
+    <p class="sub" style="margin-bottom: 8px">Un tiempo entre paréntesis está registrado en el JSON pero no entra en MC2; el motivo está en Observaciones.</p>
     <div class="table-wrap">
       <table class="data compact" data-sortable>
         <thead>
@@ -97,7 +98,11 @@
             <td><a href="{{ url_for('sesion', run_id=row.run.id, **filters.query()) }}#e{{ summary.meta.number }}">{{ row.run.pin }}</a></td>
             <td>{{ row.run.sheet.participant or '—' }}</td>
             <td class="n">{{ row.G if row.G is not none else '—' }}</td>
-            <td class="n">{{ row.seconds|num if row.seconds is not none else '—' }}</td>
+            <td class="n" data-v="{{ row.recorded if row.recorded is not none else '' }}">
+              {%- if row.seconds is not none %}{{ row.seconds|num }}
+              {%- elif row.recorded %}<span class="sub" title="Registrado por la aplicación, pero fuera de MC2: {{ row.timeWhy }}">({{ row.recorded|num }})</span>
+              {%- else %}—{% endif -%}
+            </td>
             <td class="n">{{ row.N if row.N is not none else '—' }}</td>
             {% if summary.meta.number != 3 %}
             <td class="n">{{ row.F if row.F is not none else '—' }}</td>

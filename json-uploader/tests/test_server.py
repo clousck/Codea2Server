@@ -464,6 +464,18 @@ class MetricsTest(ServerCase):
         self.assertEqual({r["file"]: r["e2_timedOut"] for r in self.rows("sesiones")}["0109_9_00000.json"], "1")
         self.assertEqual(self.status("/sesiones/0109_9_00000"), 200)
 
+    def test_time_that_cannot_be_trusted_is_shown_but_left_out_of_mc2(self):
+        # Pulsó ejecutar antes de que el juego abriera el reto: totalSeconds se queda en unos segundos
+        data = json.loads((CURRENT / "0101_5_00000.json").read_text(encoding="utf-8-sig"))
+        data["escenario1"]["startedUtc"] = "2026-09-30T15:17:05.0000000Z"
+        data["escenario1"]["totalSeconds"] = 2.118
+        self.put("0109_9_00000.json", json.dumps(dict(data, pin="0109", sessionId=9)).encode())
+        row = self.analysis()[("0109_9_00000.json", "1")]
+        self.assertEqual((row["totalSeconds"], row["recordedSeconds"]), ("", "2.118"))
+        self.assertEqual(row["time_excluded"], "sin validar: hay un evento anterior al inicio del reto")
+        page = self.client.get("/sesiones/0109_9_00000", headers=BROWSER).get_data(as_text=True)
+        self.assertIn("fuera de MC2 (sin validar: hay un evento anterior al inicio del reto)", page)
+
     def test_session_sheet(self):
         response = self.post_sheet("0101_5_00000", participant=" P-07 ", moment="final", help="verbal",
                                    closure="completada", gameVersion="1.4", p_patrones_1="1", p_patrones_2="0",
