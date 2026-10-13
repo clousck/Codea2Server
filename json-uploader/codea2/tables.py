@@ -8,6 +8,7 @@ cruzarlos con la documentación de variables del proyecto. Las banderas van toda
 from dataclasses import dataclass
 from datetime import datetime
 
+from . import sheet as ficha
 from .model import SCENARIOS, ZONE, as_flag, as_float, as_int, is_selected, parse_utc, seconds_between
 
 SEQUENCE_SEPARATOR = " > "
@@ -176,6 +177,17 @@ _SESSION_TAIL = (
     Column("issues", "int", "Avisos de integridad de la sesión. El detalle está en la tabla avisos"),
     Column("excluded", "flag", "1 si la sesión está excluida del análisis en el panel"),
     Column("note", "text", "Nota escrita en el panel"),
+    Column("participant", "text", "Ficha · Código de participante"),
+    Column("moment", "text", "Ficha · Momento de evaluación: inicial o final"),
+    Column("help", "text", "Ficha · Ayuda recibida: ninguna, verbal o directa"),
+    Column("closure", "text", "Ficha · Motivo de cierre: completada, tiempo, abandono o tecnica"),
+    Column("gameVersion", "text", "Ficha · Versión del juego"),
+    *(Column(ficha.criterion(key, number), "text",
+             f"Ficha · {name}, criterio {number}: 1 se cumple, 0 no se cumple, NO sin evidencia")
+      for key, (name, _, _) in ficha.PILLARS.items() for number in (1, 2)),
+    *(Column(f"p_{key}_pct", "int",
+             f"Ficha · {name}: 0, 50 o 100 si se observaron los dos criterios. No es un porcentaje de dominio")
+      for key, (name, _, _) in ficha.PILLARS.items()),
     Column("uploadedLocal", "local", "Fecha del archivo en el servidor (última subida), en hora local"),
 )
 
@@ -218,6 +230,10 @@ def sessions_table(runs):
             "issues": len(run.issues),
             "excluded": run.excluded,
             "note": run.note,
+            **{key: run.sheet.get(key, "") for key in ("participant", "moment", "help", "closure", "gameVersion")},
+            **{ficha.criterion(key, number): run.sheet.get(ficha.criterion(key, number), "")
+               for key in ficha.PILLARS for number in (1, 2)},
+            **{f"p_{key}_pct": ficha.pillar_score(run.sheet, key) for key in ficha.PILLARS},
             "uploadedLocal": _local(datetime.fromtimestamp(run.file.mtime, ZONE)),
         })
         rows.append(row)
@@ -547,5 +563,7 @@ BUILDERS = (sessions_table, scenarios_table, attempts_table, blocks_table,
 
 def build_tables(runs):
     """Todas las tablas del recorte, con el diccionario al final."""
-    tables = [build(runs) for build in BUILDERS]
+    from .metrics import analysis_table  # metrics depende de este módulo
+
+    tables = [analysis_table(runs), *(build(runs) for build in BUILDERS)]
     return [*tables, dictionary_table(tables)]

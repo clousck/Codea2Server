@@ -14,6 +14,7 @@ services:
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
       - DASHBOARD_PUBLIC=${DASHBOARD_PUBLIC:-}
       - DASHBOARD_TZ=${DASHBOARD_TZ:-America/Guayaquil}
+      - ANALYZE_OLD_FORMAT=${ANALYZE_OLD_FORMAT:-}
     volumes:
       - ./uploads:/data/uploads
     healthcheck:

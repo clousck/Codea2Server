@@ -23,6 +23,7 @@ os.environ.update(UPLOAD_DIR=UPLOADS, UPLOAD_API_KEY="clave-visor", DASHBOARD_PA
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import server  # noqa: E402
+from codea2 import model  # noqa: E402
 
 logging.disable(logging.CRITICAL)
 
@@ -49,6 +50,8 @@ class ServerCase(unittest.TestCase):
         for entry in os.scandir(UPLOADS):
             shutil.rmtree(entry.path) if entry.is_dir() else os.remove(entry.path)
         server._FAILED_LOGINS.clear()
+        # Las pruebas del formato anterior lo analizan; por defecto queda fuera
+        model.INCLUDE_LEGACY = True
         self.client = server.app.test_client()
 
     def put(self, name, content):
@@ -148,7 +151,7 @@ class ReadingTest(ServerCase):
         self.assertEqual(status, {"0101_5.json": "ok", "roto.json": "invalid", "vacio.json": "invalid",
                                   "otra_cosa.json": "not_run", "viejo.csv": "other"})
         self.login()
-        for path in ("/", "/sesiones", "/escenarios", "/datos", "/archivos"):
+        for path in ("/?dif=1", "/exploracion", "/sesiones", "/escenarios", "/datos", "/archivos"):
             self.assertEqual(self.status(path), 200, path)
 
     def test_session_with_missing_pieces_still_renders(self):
@@ -159,7 +162,8 @@ class ReadingTest(ServerCase):
         data["endedUtc"] = ""
         self.put("0101_5.json", json.dumps(data).encode())
         self.login()
-        for path in ("/", "/sesiones", "/sesiones/0101_5", "/escenarios", "/datos", "/exportar/todo.xlsx"):
+        for path in ("/?dif=1", "/exploracion", "/sesiones", "/sesiones/0101_5", "/escenarios", "/datos",
+                     "/exportar/todo.xlsx"):
             self.assertEqual(self.status(path), 200, path)
         codes = {issue.code for issue in server.dataset.get("0101_5").issues}
         self.assertTrue({"sin_cierre", "sin_registro", "sin_completar"} <= codes, codes)
@@ -197,7 +201,7 @@ class PanelTest(ServerCase):
         self.assertEqual(self.client.get("/", headers=BROWSER).status_code, 302)
         response = self.client.post("/login", data={"password": "clave-panel", "next": "/datos"})
         self.assertEqual((response.status_code, response.headers["Location"]), (302, "/datos"))
-        self.assertEqual(self.client.get("/", headers=BROWSER).status_code, 200)
+        self.assertEqual(self.client.get("/sesiones", headers=BROWSER).status_code, 200)
 
     def test_login_never_redirects_to_another_site(self):
         for target in ("https://malo.example/", "//malo.example/", "javascript:alert(1)"):
@@ -212,7 +216,7 @@ class PanelTest(ServerCase):
 
     def test_every_page_and_download_works(self):
         self.login()
-        pages = ["/", "/sesiones", "/sesiones/0101_5", "/escenarios", "/datos", "/archivos", "/archivos/0101_5.json",
+        pages = ["/?dif=1", "/exploracion", "/sesiones", "/sesiones/0101_5", "/escenarios", "/datos", "/archivos", "/archivos/0101_5.json",
                  "/exportar/todo.xlsx", "/exportar/todo-csv.zip", "/exportar/originales.zip",
                  "/?dif=1&desde=2026-09-30&hasta=2026-09-30&pin=01*"]
         pages += [f"/exportar/{t.name}.{fmt}" for t in server.tables.build_tables([]) for fmt in ("csv", "json", "xlsx")]
@@ -293,7 +297,7 @@ class TablesTest(ServerCase):
 
     def test_workbook_keeps_types(self):
         book = load_workbook(io.BytesIO(self.client.get("/exportar/todo.xlsx").data))
-        self.assertEqual(book.sheetnames, ["sesiones", "escenarios", "intentos", "bloques", "selecciones",
+        self.assertEqual(book.sheetnames, ["analisis", "sesiones", "escenarios", "intentos", "bloques", "selecciones",
                                            "colocaciones", "eventos", "avisos", "diccionario"])
         sheet = book["sesiones"]
         row = dict(zip([c.value for c in sheet[1]], sheet[2]))
@@ -308,7 +312,7 @@ class TablesTest(ServerCase):
         data["escenario2"]["selections"][1]["option"] = "<script>alert(1)</script>"
         self.put("hostil.json", json.dumps(data).encode())
 
-        for path in ("/", "/sesiones", "/sesiones/hostil", "/escenarios", "/datos"):
+        for path in ("/?dif=1", "/exploracion", "/sesiones", "/sesiones/hostil", "/escenarios", "/datos"):
             page = self.client.get(path, headers=BROWSER).get_data(as_text=True)
             self.assertNotIn("<script>alert", page, path)
             self.assertNotIn("<b>pin</b>", page, path)
@@ -341,6 +345,7 @@ class CurrentFormatTest(ServerCase):
 
     def setUp(self):
         super().setUp()
+        model.INCLUDE_LEGACY = False
         for name in ("0101_5_00000.json", "0102_6_00000.json"):
             self.put(name, (CURRENT / name).read_bytes())
         self.login()
@@ -367,19 +372,103 @@ class CurrentFormatTest(ServerCase):
         self.assertNotIn("deseleccion", {r["event"] for r in self.rows("eventos")})
 
     def test_pages_render(self):
-        for path in ("/", "/sesiones", "/sesiones/0101_5_00000", "/escenarios", "/datos", "/exportar/todo.xlsx"):
+        for path in ("/?dif=1", "/exploracion", "/sesiones", "/sesiones/0101_5_00000", "/escenarios", "/datos",
+                     "/exportar/todo.xlsx"):
             self.assertEqual(self.status(path), 200, path)
 
     def test_both_formats_live_together(self):
         self.put("0103_4.json", sample("prueba_real.json"))
-        self.assertEqual(len(self.rows("sesiones")), 3)
-        for path in ("/", "/escenarios", "/datos"):
+        # La del formato anterior se guarda y se ve, pero no entra en el análisis
+        self.assertEqual(len(self.rows("sesiones")), 2)
+        self.assertEqual(len(self.rows("sesiones", "?excluidas=1")), 3)
+        self.assertEqual(self.status("/sesiones/0103_4"), 200)
+        for path in ("/?dif=1", "/exploracion", "/escenarios", "/datos"):
             self.assertEqual(self.status(path), 200, path)
 
     def test_name_must_carry_the_device(self):
         self.put("0101_5.json", (CURRENT / "0101_5_00000.json").read_bytes())
         codes = {issue.code for issue in server.dataset.get("0101_5").issues}
         self.assertEqual(codes, {"nombre_distinto", "duplicada"})
+
+
+
+class MetricsTest(ServerCase):
+    """Las métricas del documento del 09/10/2026, con sus propios ejemplos de cálculo."""
+
+    def setUp(self):
+        super().setUp()
+        model.INCLUDE_LEGACY = False
+        for name in ("0101_5_00000.json", "0102_6_00000.json"):
+            self.put(name, (CURRENT / name).read_bytes())
+        self.login()
+
+    def analysis(self, query=""):
+        return {(r["file"], r["scenario"]): r for r in self.rows("analisis", query)}
+
+    def post_sheet(self, run_id, **fields):
+        return self.client.post(f"/sesiones/{run_id}/estado", data={"csrf": self.csrf(), **fields})
+
+    def test_home_asks_for_one_difficulty(self):
+        response = self.client.get("/", headers=BROWSER)
+        self.assertEqual((response.status_code, response.headers["Location"]), (302, "/?dif=1"))
+        page = self.client.get("/?dif=1", headers=BROWSER).get_data(as_text=True)
+        for code in ("MC1", "MC2", "E1A", "E1B", "E1C", "E2A", "E2B", "E2C", "E3A", "E3B", "E3C", "E4A", "E4B", "E4C"):
+            self.assertIn(f">{code}<", page)
+
+    def test_each_scenario(self):
+        rows = self.analysis()
+        e1, e2 = rows[("0101_5_00000.json", "1")], rows[("0101_5_00000.json", "2")]
+        e3, e4 = rows[("0101_5_00000.json", "3")], rows[("0101_5_00000.json", "4")]
+        self.assertEqual((e1["G"], e1["N"], e1["K"], e1["F"], e1["errorPct"]), ("1", "1", "1", "0", "0"))
+        # 5 selecciones, 2 incorrectas; la primera de enfriamiento falla y las otras dos aciertan
+        self.assertEqual((e2["N"], e2["F"], e2["errorPct"]), ("5", "2", "40"))
+        self.assertEqual((e2["firstCorrect"], e2["firstObserved"], e2["firstPct"]), ("2", "3", "66.667"))
+        # Dos ejecuciones: de 7 con Caja a 3 con Barril es un cambio del plan, no un fallo
+        self.assertEqual((e3["N"], e3["K"], e3["unsolved"], e3["F"], e3["errorPct"]), ("2", "2", "1", "", ""))
+        self.assertEqual((e3["planChanges"], e3["pairsEvaluable"], e3["pairsExcluded"]), ("1", "1", "0"))
+        self.assertEqual((e4["N"], e4["F"], e4["errorPct"]), ("7", "3", "42.857"))
+        self.assertEqual((e4["firstCorrect"], e4["firstObserved"], e4["firstPct"]), ("2", "4", "50"))
+        self.assertEqual((e1["totalSeconds"], e1["time_excluded"]), ("32.946", ""))
+
+    def test_what_cannot_be_measured_stays_empty(self):
+        data = json.loads((CURRENT / "0101_5_00000.json").read_text(encoding="utf-8-sig"))
+        data["endedUtc"] = ""
+        data["escenario3"].update(completed=False, endedUtc="")
+        data["escenario3"]["attempts"] = [dict(a, solved=False, itemType="") for a in data["escenario3"]["attempts"]]
+        data["escenario4"] = {"started": False, "completed": False, "totalSeconds": 0.0, "startedUtc": "",
+                              "endedUtc": "", "chipsGrabbed": 0, "placements": []}
+        self.put("0109_9_00000.json", json.dumps(dict(data, pin="0109", sessionId=9)).encode())
+        rows = self.analysis()
+        e3, e4 = rows[("0109_9_00000.json", "3")], rows[("0109_9_00000.json", "4")]
+        self.assertEqual((e3["G"], e3["G_excluded"], e3["K"], e3["totalSeconds"]), ("", "sin cierre confirmado", "", ""))
+        self.assertEqual((e3["planChanges"], e3["pairsEvaluable"], e3["pairsExcluded"]), ("", "0", "1"))
+        self.assertEqual((e4["G"], e4["G_excluded"], e4["N"]), ("", "no iniciado", ""))
+
+        # El motivo de cierre de la ficha decide si lo no terminado cuenta como no logrado
+        self.post_sheet("0109_9_00000", closure="tiempo")
+        self.assertEqual(self.analysis()[("0109_9_00000.json", "3")]["G"], "0")
+        self.post_sheet("0109_9_00000", closure="tecnica")
+        self.assertEqual(self.analysis()[("0109_9_00000.json", "3")]["G_excluded"], "interrupción técnica")
+        self.assertEqual(self.status("/?dif=1"), 200)
+
+    def test_session_sheet(self):
+        response = self.post_sheet("0101_5_00000", participant=" P-07 ", moment="final", help="verbal",
+                                   closure="completada", gameVersion="1.4", p_patrones_1="1", p_patrones_2="0",
+                                   p_abstraccion_1="1", p_abstraccion_2="NO", note="tranquilo")
+        self.assertEqual(response.status_code, 302)
+        row = self.rows("sesiones")[0]
+        self.assertEqual((row["participant"], row["moment"], row["help"], row["closure"], row["gameVersion"], row["note"]),
+                         ("P-07", "final", "verbal", "completada", "1.4", "tranquilo"))
+        # Solo hay porcentaje con los dos criterios observados
+        self.assertEqual((row["p_patrones_pct"], row["p_abstraccion_pct"], row["p_algoritmico_pct"]), ("50", "", ""))
+        self.assertEqual(self.analysis()[("0101_5_00000.json", "1")]["participant"], "P-07")
+
+        # Tocar otra cosa no borra la ficha, y un valor inventado no se guarda
+        self.post_sheet("0101_5_00000", excluded="0", moment="nunca")
+        row = self.rows("sesiones")[0]
+        self.assertEqual((row["participant"], row["moment"]), ("P-07", ""))
+        page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
+        self.assertIn('value="P-07"', page)
 
 
 if __name__ == "__main__":

@@ -3,8 +3,8 @@
 Servidor de datos de **CODEA 2**, el escape room educativo en VR de Yachay Tech. Hace dos cosas:
 
 1. **Recibe** el JSON de cada sesión que sube el visor (`POST /upload`).
-2. **Muestra** esas sesiones en un panel web: resumen, detalle de cada partida, análisis por
-   escenario y todo tabulado para descargar en Excel, CSV o JSON.
+2. **Muestra** esas sesiones en un panel web centrado en las métricas del estudio (dos comunes
+   y tres por escenario), con la ficha de cada sesión y todo tabulado para descargar.
 
 Corre en Docker en la Raspberry Pi, detrás del túnel de Cloudflare:
 **<https://codea2.penginexr.com>**
@@ -48,6 +48,7 @@ Sin tocar nada funciona con los valores de `docker-compose.yml`. Para cambiarlos
 | `DASHBOARD_PASSWORD` | la clave de subida | Contraseña del panel |
 | `DASHBOARD_PUBLIC` | vacío | `1` deja ver y descargar sin contraseña. Editar sigue pidiéndola |
 | `DASHBOARD_TZ` | `America/Guayaquil` | Zona horaria en la que se muestran las horas |
+| `ANALYZE_OLD_FORMAT` | vacío | `1` mete en el análisis las sesiones con el JSON anterior al 06/10/2026 |
 
 **La contraseña del panel es, por defecto, la clave de subida.** Esa clave viaja dentro del
 APK, así que conviene poner una `DASHBOARD_PASSWORD` propia: con ella, la clave del visor solo
@@ -57,15 +58,40 @@ sirve para subir y no para leer.
 
 | Página | Qué hay |
 |---|---|
-| **Resumen** | Sesiones, cuántas completaron los cuatro escenarios, duración, tiempo por escenario (un punto por sesión), sesiones por día y descriptivos |
+| **Métricas** | La página principal. Por escenario: MC1 logro final, MC2 tiempo registrado y sus tres métricas (E1A–E4C), siempre con numerador, denominador y exclusiones. Una sola dificultad cada vez. Al final, la evidencia de pilares de las fichas |
 | **Sesiones** | Una fila por partida, ordenable y con buscador. Desde aquí se excluye una sesión del análisis |
-| **Detalle de una sesión** | Línea de tiempo, cada intento, selección y colocación con su hora, avisos de integridad, nota y JSON original |
-| **Escenarios** | Lo que pasó dentro de cada reto: intentos hasta completar, secuencias probadas, qué opción se marcó en cada módulo, repeticiones según la ficha, qué ficha se puso en cada hueco |
+| **Detalle de una sesión** | Sus métricas, línea de tiempo, cada intento, selección y colocación con su hora, avisos de integridad, **ficha de sesión** y JSON original |
 | **Datos** | Las tablas, con vista previa, diccionario de columnas y descarga |
 | **Archivos** | Lo que hay en `uploads/` y su estado. Subida a mano de los JSON sacados del visor por cable |
+| **Exploración** | Lo que no es métrica del estudio pero ayuda a preparar preguntas: tiempos sesión a sesión, secuencias probadas, qué opción se marcó en cada módulo, qué ficha se puso en cada hueco |
 
 Los filtros de arriba (fechas, dificultad, PIN) valen para todo lo que hay debajo **y para las
 descargas**. En PIN se pueden poner varios, comodines y descartes: `0101 02* -0000`.
+
+### Las métricas
+
+Siguen el documento «Métricas por escenario de CODEA2» (09/10/2026). Las reglas están en
+`codea2/metrics.py`:
+
+- La unidad es una sesión en un escenario; las dificultades no se mezclan.
+- Lo que no se puede calcular queda **sin dato**, nunca en cero (K de quien no resuelve, un
+  porcentaje con denominador cero).
+- **MC1** excluye del denominador los escenarios no iniciados, los que quedan sin cierre
+  confirmado y las interrupciones técnicas. El *motivo de cierre* de la ficha decide los dudosos.
+- **MC2** solo usa el tiempo de escenarios completados cuyo cronómetro no tiene avisos
+  (`evento_antes`, `evento_despues`, `tiempo_distinto`).
+- Los porcentajes son el promedio de los porcentajes de cada sesión; el global (suma de F entre
+  suma de N) se muestra al lado.
+- En el escenario 3 no hay tasa de fallos: `solved = false` es una pasada intermedia.
+- El documento se escribió con el formato de JSON anterior. Con el actual, E1C son choques y
+  usos inválidos, y F ya no se contrasta con `wrongSelections` ni `wrongPlacements`.
+
+### La ficha de sesión
+
+Lo que el estudio necesita y el visor no sabe. Se rellena en la página de cada sesión: código
+de participante, momento (inicial o final), ayuda recibida, motivo de cierre, versión del juego
+y los dos criterios de cada pilar (1, 0 o NO) con su evidencia. Se guarda en
+`uploads/.codea2-panel.json` y sale en las tablas `sesiones` y `analisis`.
 
 **Excluir no borra.** Una sesión excluida (una prueba interna, un duplicado) sigue en
 `uploads/`, pero deja de contar en el resumen, en los escenarios y en las descargas.
@@ -76,7 +102,8 @@ Todas llevan `file`, `pin`, `deviceId`, `sessionId` y `difficulty`. `file` es la
 
 | Tabla | Una fila por… |
 |---|---|
-| `sesiones` | sesión, con el resumen de los cuatro escenarios en columnas `e1_`…`e4_` |
+| `analisis` | sesión y escenario, con las métricas del estudio (G, tiempo validado, N, F, K, primer acierto, cambios del plan) y por qué se excluye lo excluido. **La tabla para el estudio** |
+| `sesiones` | sesión, con el resumen de los cuatro escenarios en columnas `e1_`…`e4_` y la ficha |
 | `escenarios` | sesión y escenario (lo mismo, en formato largo) |
 | `intentos` | pulsación de ejecutar en los escenarios 1 y 3 |
 | `bloques` | bloque de cada secuencia, para analizar el orden |
@@ -187,7 +214,9 @@ json-uploader/
   codea2/model.py         una sesión normalizada y los filtros
   codea2/checks.py        avisos de integridad
   codea2/tables.py        las tablas
-  codea2/stats.py         descriptivos y datos de los gráficos
+  codea2/metrics.py       las métricas del estudio y la tabla de análisis
+  codea2/sheet.py         la ficha de sesión
+  codea2/stats.py         descriptivos y datos de los gráficos de Exploración
   codea2/exports.py       CSV, JSON, Excel y ZIP
   templates/, static/     el panel (sin dependencias externas ni CDN)
   tests/                  pruebas

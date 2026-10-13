@@ -1,6 +1,6 @@
 {# Piezas que se repiten entre páginas. Se importa "with context" para ver filtros y constantes. #}
 
-{% macro filter_bar(endpoint, runs, excluded_count) %}
+{% macro filter_bar(endpoint, runs, excluded_count, any_difficulty=true) %}
 <form class="filters" method="get" action="{{ url_for(endpoint) }}" data-autosubmit>
   <label>Desde
     <input type="date" name="desde" value="{{ filters.date_from.isoformat() if filters.date_from else '' }}">
@@ -10,7 +10,7 @@
   </label>
   <label>Dificultad
     <select name="dif">
-      <option value="">Todas</option>
+      {% if any_difficulty %}<option value="">Todas</option>{% endif %}
       {% for value, label in DIFFICULTIES.items() %}
       <option value="{{ value }}"{% if filters.difficulty == value %} selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -27,9 +27,16 @@
   {% endif %}
   <div class="count">
     <strong>{{ runs|length }}</strong> {{ 'sesión' if runs|length == 1 else 'sesiones' }} en el análisis
-    {%- if excluded_count %} · <a href="{{ url_for('sesiones', **filters.query()) }}">{{ excluded_count }} {{ 'excluida' if excluded_count == 1 else 'excluidas' }}</a>{% endif %}
+    {%- if excluded_count %} · <a href="{{ url_for('sesiones', **filters.query()) }}">{{ excluded_count }} fuera del análisis</a>{% endif %}
   </div>
 </form>
+{% endmacro %}
+
+{% macro explore_tabs(current) %}
+<div class="btn-row" style="margin-bottom: 16px">
+  <a class="btn{{ '' if current == 'resumen' else ' ghost' }}" href="{{ url_for('resumen', **filters.query()) }}">Resumen general</a>
+  <a class="btn{{ '' if current == 'escenarios' else ' ghost' }}" href="{{ url_for('escenarios', **filters.query()) }}">Dentro de cada escenario</a>
+</div>
 {% endmacro %}
 
 {% macro meter(ratio, label) %}

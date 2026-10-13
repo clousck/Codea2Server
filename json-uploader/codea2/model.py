@@ -27,6 +27,10 @@ ZONE = _local_zone()
 
 DIFFICULTIES = {1: "Básica", 2: "Intermedia"}
 
+# Las sesiones con el formato anterior al 06/10/2026 son pruebas internas con el cronómetro
+# sin validar: se guardan y se pueden ver, pero no entran en el análisis salvo que se pida.
+INCLUDE_LEGACY = os.environ.get("ANALYZE_OLD_FORMAT", "").strip() == "1"
+
 
 @dataclass(frozen=True)
 class ScenarioMeta:
@@ -196,6 +200,16 @@ class Run:
     excluded: bool = False
     note: str = ""
     issues: tuple = field(default_factory=tuple)
+    sheet: dict = field(default_factory=dict)  # ficha de sesión, rellenada en el panel
+
+    @property
+    def legacy(self):
+        """Formato anterior al 06/10/2026: el visor aún no mandaba su código."""
+        return "deviceId" not in self.raw
+
+    @property
+    def left_out(self):
+        return self.excluded or (self.legacy and not INCLUDE_LEGACY)
 
     @property
     def id(self):
@@ -347,4 +361,4 @@ class Filters:
     def apply(self, runs, with_excluded=None):
         """Las sesiones del recorte. Las excluidas solo entran si se piden."""
         keep_excluded = self.with_excluded if with_excluded is None else with_excluded
-        return [r for r in runs if self.matches(r) and (keep_excluded or not r.excluded)]
+        return [r for r in runs if self.matches(r) and (keep_excluded or not r.left_out)]

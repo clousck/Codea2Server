@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui with context %}
 {% set active = 'resumen' %}
-{% block title %}Resumen{% endblock %}
+{% block title %}Exploración{% endblock %}
 
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Resumen</h1>
-    <p class="sub">
+    <h1>Exploración</h1>
+    <p class="sub">Todo lo que trae el JSON, para preparar preguntas y revisar casos. Las cifras del estudio están en <a href="{{ url_for('metricas', **filters.query()) }}">Métricas</a>.
+      
       {% if headline.last_upload %}Última subida: {{ headline.last_upload|dt }}.{% else %}Todavía no hay sesiones subidas.{% endif %}
     </p>
   </div>
@@ -17,6 +18,7 @@
   </div>
 </div>
 
+{{ ui.explore_tabs('resumen') }}
 {{ ui.filter_bar('resumen', runs, excluded_count) }}
 
 {% if not runs %}

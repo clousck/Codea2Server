@@ -102,7 +102,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Escenarios</h1>
+    <h1>Exploración</h1>
     <p class="sub">Qué pasó dentro de cada reto, sumando todas las sesiones del recorte.</p>
   </div>
   <div class="btn-row">
@@ -110,6 +110,7 @@
   </div>
 </div>
 
+{{ ui.explore_tabs('escenarios') }}
 {{ ui.filter_bar('escenarios', runs, excluded_count) }}
 
 {% if not runs %}

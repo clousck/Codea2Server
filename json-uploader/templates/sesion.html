@@ -26,6 +26,9 @@
       <span class="tag">{{ run.difficulty_label }}</span>
       {% if run.device_id %}<span class="tag" title="Código del visor">Visor {{ run.device_id }}</span>{% endif %}
       {% if run.excluded %}<span class="tag">Excluida del análisis</span>{% endif %}
+      {% if run.legacy %}<span class="tag" title="JSON anterior al 06/10/2026: no entra en el análisis">Formato anterior</span>{% endif %}
+      {% if run.sheet.participant %}<span class="tag" title="Código de participante">{{ run.sheet.participant }}</span>{% endif %}
+      {% if run.sheet.moment %}<span class="tag">{{ sheet.MOMENTS[run.sheet.moment] }}</span>{% endif %}
       {{ run.started_at|dt('%d/%m/%Y, %H:%M:%S') }} · {{ run.seconds|clock }} min ·
       {{ run.scenarios_completed }} de {{ SCENARIOS|length }} escenarios completados
     </p>
@@ -99,6 +102,15 @@
     </div>
 
     {% if scenario.present and (scenario.started or rows) %}
+    {% set m = measures[number] %}
+    <ul class="pairs measures" title="Métricas del estudio para esta sesión">
+      {% if m.K is not none or meta.events_key == 'attempts' %}<li><span>K · primera resolución</span>{{ m.K if m.K is not none else 'sin dato' }}</li>{% endif %}
+      {% if m.N is not none %}<li><span>N · evaluables</span>{{ m.N }}</li>{% endif %}
+      {% if m.F is not none %}<li><span>F · incorrectos</span>{{ m.F }}{% if m.PF is not none %} ({{ m.PF|num }} %){% endif %}</li>{% endif %}
+      {% if m.M is not none %}<li><span>Primer acierto</span>{{ m.A }} de {{ m.M }}{% if m.P1 is not none %} ({{ m.P1|num }} %){% endif %}</li>{% endif %}
+      {% if number == 3 %}<li><span>C · cambios del plan</span>{{ m.C if m.C is not none else 'sin dato' }}</li>{% endif %}
+      {% if m.timeWhy and scenario.started %}<li><span>Tiempo fuera de MC2</span>{{ m.timeWhy }}</li>{% endif %}
+    </ul>
     <ul class="pairs">
       <li><span>Inicio</span>{{ scenario.started_at|dt('%H:%M:%S') }}</li>
       <li><span>{{ meta.events_label }}</span>{{ rows|length }}</li>
@@ -163,17 +175,58 @@
   {% endfor %}
 
   {% if can_edit %}
-  <section class="card">
-    <h3>Nota y análisis</h3>
-    <p class="sub">Una sesión excluida sigue guardada, pero no cuenta en el resumen, en los escenarios ni en las descargas.</p>
-    <form method="post" action="{{ url_for('sesion_estado', run_id=run.id) }}" class="card-body" style="display: grid; gap: 12px; max-width: 640px">
+  <section class="card" id="ficha">
+    <h3>Ficha de sesión</h3>
+    <p class="sub">Lo que el estudio necesita y el visor no puede saber. Todo es opcional y se puede completar más tarde.</p>
+    <form method="post" action="{{ url_for('sesion_estado', run_id=run.id) }}" class="card-body ficha">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-      <input type="hidden" name="excluded" value="0">
-      <label class="switch"><input type="checkbox" name="excluded" value="1"{% if run.excluded %} checked{% endif %}> Excluir esta sesión del análisis</label>
+      <div class="ficha-row">
+        <label>Código de participante
+          <input type="text" name="participant" value="{{ run.sheet.participant }}" maxlength="80" placeholder="El mismo en la sesión inicial y en la final">
+        </label>
+        <label>Momento
+          <select name="moment"><option value="">Sin indicar</option>{% for value, label in sheet.MOMENTS.items() %}<option value="{{ value }}"{% if run.sheet.moment == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        </label>
+        <label>Ayuda recibida
+          <select name="help"><option value="">Sin indicar</option>{% for value, label in sheet.HELP.items() %}<option value="{{ value }}"{% if run.sheet.help == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        </label>
+        <label title="Con «interrupción técnica», los escenarios sin terminar no cuentan en el logro final">Motivo de cierre
+          <select name="closure"><option value="">Sin indicar</option>{% for value, label in sheet.CLOSURES.items() %}<option value="{{ value }}"{% if run.sheet.closure == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        </label>
+        <label>Versión del juego
+          <input type="text" name="gameVersion" value="{{ run.sheet.gameVersion }}" maxlength="80">
+        </label>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data compact">
+          <thead><tr><th>Pilar</th><th>Criterio 1</th><th>Criterio 2</th><th>Frase, secuencia o esquema que lo respalda</th></tr></thead>
+          <tbody>
+            {% for key, (name, first, second) in sheet.PILLARS.items() %}
+            <tr>
+              <td><strong>{{ name }}</strong></td>
+              {% for number, text in [(1, first), (2, second)] %}
+              <td>
+                <div class="sub">{{ text }}</div>
+                <select name="{{ sheet.criterion(key, number) }}" aria-label="{{ name }}, criterio {{ number }}">
+                  <option value="">Sin valorar</option>
+                  {% for value, label in sheet.CODES.items() %}<option value="{{ value }}"{% if run.sheet[sheet.criterion(key, number)] == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+              </td>
+              {% endfor %}
+              <td><textarea name="{{ sheet.evidence(key) }}" maxlength="500" aria-label="Evidencia de {{ name }}">{{ run.sheet[sheet.evidence(key)] }}</textarea></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
       <label class="sub" style="display: grid; gap: 4px">Nota
         <textarea name="note" maxlength="2000" placeholder="Por ejemplo: prueba interna, se quitó el visor en el escenario 2…">{{ run.note }}</textarea>
       </label>
-      <div><button class="btn primary" type="submit">Guardar</button></div>
+      <input type="hidden" name="excluded" value="0">
+      <label class="switch"><input type="checkbox" name="excluded" value="1"{% if run.excluded %} checked{% endif %}> Excluir esta sesión del análisis (sigue guardada)</label>
+      <div><button class="btn primary" type="submit">Guardar la ficha</button></div>
     </form>
   </section>
   {% elif run.note %}

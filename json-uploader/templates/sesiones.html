@@ -7,7 +7,7 @@
 <div class="page-head">
   <div>
     <h1>Sesiones</h1>
-    <p class="sub">Una fila por partida. Las excluidas no cuentan en el resumen, en los escenarios ni en las descargas.</p>
+    <p class="sub">Una fila por partida. Las excluidas y las del formato anterior al 06/10/2026 no cuentan en las métricas ni en las descargas.</p>
   </div>
   <div class="btn-row">
     <a class="btn" href="{{ url_for('exportar', name='sesiones', fmt='xlsx', **filters.query()) }}">Excel</a>
@@ -70,7 +70,7 @@
           <td class="n" data-v="{{ run.issues|length }}">
             {% if run.issues %}<span class="status warn" title="{% for issue in run.issues %}{{ issue.message }}{{ ' ' if not loop.last }}{% endfor %}">{{ run.issues|length }}</span>{% else %}<span class="sub">0</span>{% endif %}
           </td>
-          <td class="sub"><span class="tag" data-excluded-tag{% if not run.excluded %} hidden{% endif %}>Excluida</span> {{ run.note }}</td>
+          <td class="sub"><span class="tag" data-excluded-tag{% if not run.excluded %} hidden{% endif %}>Excluida</span>{% if run.legacy %} <span class="tag" title="JSON anterior al 06/10/2026: no entra en el análisis">Formato anterior</span>{% endif %}{% if run.sheet.participant %} <span class="tag" title="Código de participante">{{ run.sheet.participant }}</span>{% endif %} {{ run.note }}</td>
         </tr>
         {% endfor %}
       </tbody>

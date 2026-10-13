@@ -11,11 +11,11 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('resumen', **filters.query()) }}">CODEA 2 <small>Telemetría</small></a>
+    <a class="brand" href="{{ url_for('metricas', **filters.query()) }}">CODEA 2 <small>Telemetría</small></a>
     <nav class="nav" aria-label="Secciones">
       {% if can_edit or is_public %}
-      {% for endpoint, label in [('resumen', 'Resumen'), ('sesiones', 'Sesiones'), ('escenarios', 'Escenarios'), ('datos', 'Datos'), ('archivos', 'Archivos')] %}
-      <a href="{{ url_for(endpoint, **filters.query()) }}"{% if active == endpoint %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% for endpoint, label in [('metricas', 'Métricas'), ('sesiones', 'Sesiones'), ('datos', 'Datos'), ('archivos', 'Archivos'), ('resumen', 'Exploración')] %}
+      <a href="{{ url_for(endpoint, **filters.query()) }}"{% if active == endpoint or (endpoint == 'resumen' and active == 'escenarios') %} aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
       {% endif %}
     </nav>

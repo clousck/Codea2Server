@@ -7,6 +7,6 @@
   <p style="margin-top: 8px">
     {% if error.code == 404 and 'URL' in error.description %}Esa página no existe.{% else %}{{ error.description }}{% endif %}
   </p>
-  <p style="margin-top: 16px"><a href="{{ url_for('resumen') }}">Volver al resumen</a></p>
+  <p style="margin-top: 16px"><a href="{{ url_for('metricas') }}">Volver a las métricas</a></p>
 </div>
 {% endblock %}

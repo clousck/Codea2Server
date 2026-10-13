@@ -228,15 +228,16 @@ class Store:
                 self._state = (mtime, sessions if isinstance(sessions, dict) else {})
             return self._state[1]
 
-    def set_state(self, name, excluded=None, note=None):
+    def set_state(self, name, **fields):
+        """Cambia lo que se pase del estado de una sesión; lo que vaya en None no se toca."""
         with self._lock:
             sessions = {k: dict(v) for k, v in self.state().items() if isinstance(v, dict)}
             entry = sessions.get(name, {})
-            if excluded is not None:
-                entry["excluded"] = bool(excluded)
-            if note is not None:
-                entry["note"] = note.strip()
-            if entry.get("excluded") or entry.get("note"):
+            for key, value in fields.items():
+                if value is not None:
+                    entry[key] = value.strip() if isinstance(value, str) else value
+            entry = {key: value for key, value in entry.items() if value}
+            if entry:
                 sessions[name] = entry
             else:
                 sessions.pop(name, None)

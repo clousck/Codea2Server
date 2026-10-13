@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui with context %}
+{% set active = 'metricas' %}
+{% block title %}Métricas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Métricas · dificultad {{ DIFFICULTIES[filters.difficulty]|lower }}</h1>
+    <p class="sub">Dos métricas comunes y tres por escenario, con sus conteos. Describen lo que pasó en el juego; no miden por sí solas el dominio de un pilar.</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn primary" href="{{ url_for('exportar', name='analisis', fmt='xlsx', **filters.query()) }}">Tabla de análisis (Excel)</a>
+    <a class="btn" href="{{ url_for('exportar', name='analisis', fmt='csv', **filters.query()) }}">CSV</a>
+  </div>
+</div>
+
+{{ ui.filter_bar('metricas', runs, excluded_count, any_difficulty=false) }}
+
+{% if legacy_count %}
+<div class="notice info" role="note" style="margin-bottom: 16px">
+  {{ legacy_count }} {{ 'sesión del formato anterior al 06/10/2026 no entra' if legacy_count == 1 else 'sesiones del formato anterior al 06/10/2026 no entran' }} en estas cifras. Siguen en <a href="{{ url_for('sesiones', **filters.query()) }}">Sesiones</a>.
+</div>
+{% endif %}
+
+{% if not runs %}
+<div class="card empty">
+  Todavía no hay sesiones de dificultad {{ DIFFICULTIES[filters.difficulty]|lower }} con el formato actual en este recorte.
+</div>
+{% else %}
+
+{% for summary in summaries %}
+<div class="section-head" id="e{{ summary.meta.number }}">
+  <h2>{{ summary.meta.short }} · {{ summary.title }}</h2>
+  <p class="sub">{{ summary.pillars }} · {{ summary.rows|length }} de {{ summary.sessions }} sesiones lo iniciaron</p>
+</div>
+
+<div class="grid five">
+  {% for card in summary.cards %}
+  <div class="card metric" title="{{ card.hint }}">
+    <h3><span class="code">{{ card.code }}</span>{{ card.name }}</h3>
+    {% if card.value %}<div class="value">{{ card.value }}</div>{% endif %}
+    <div class="note">{{ card.note }}</div>
+    {% if card.ratio is not none %}{{ ui.meter(card.ratio, card.name ~ ': ' ~ card.value) }}{% endif %}
+    <dl class="facts">
+      {% for label, text in card.lines %}<dt>{{ label }}</dt><dd>{{ text }}</dd>{% endfor %}
+    </dl>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-top: 16px">
+  {% if summary.breakdown %}
+  <h3>Por {{ summary.group_label|lower }}</h3>
+  <p class="sub">Sumando las sesiones del recorte. El primer acierto cuenta las sesiones cuya primera decisión ahí fue correcta.</p>
+  <div class="card-body table-wrap">
+    <table class="data compact">
+      <thead>
+        <tr><th>{{ summary.group_label }}</th><th class="n">Sesiones</th><th class="n">N</th><th class="n">F</th><th class="n">% de error</th><th class="n">Primer acierto</th></tr>
+      </thead>
+      <tbody>
+        {% for group in summary.breakdown %}
+        <tr>
+          <td>{{ group.name }}</td>
+          <td class="n">{{ group.sessions }}</td>
+          <td class="n">{{ group.N }}</td>
+          <td class="n">{{ group.F }}</td>
+          <td class="n">{{ group.PF|num if group.PF is not none else 'sin dato' }}{{ ' %' if group.PF is not none }}</td>
+          <td class="n">{{ group.A }} de {{ group.sessions }}{% if group.P1 is not none %} ({{ group.P1|num }} %){% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <details class="table-view"{% if not summary.breakdown %} style="margin-top: 0"{% endif %}>
+    <summary>Ver sesión por sesión</summary>
+    <div class="table-wrap">
+      <table class="data compact" data-sortable>
+        <thead>
+          <tr>
+            <th><button class="sort" type="button">PIN</button></th>
+            <th><button class="sort" type="button">Participante</button></th>
+            <th class="n"><button class="sort" type="button">G</button></th>
+            <th class="n"><button class="sort" type="button">Tiempo (s)</button></th>
+            <th class="n"><button class="sort" type="button">N</button></th>
+            {% if summary.meta.number != 3 %}<th class="n"><button class="sort" type="button">F</button></th><th class="n"><button class="sort" type="button">% error</button></th>{% endif %}
+            {% if summary.meta.events_key == 'attempts' %}<th class="n"><button class="sort" type="button">K</button></th>{% else %}<th class="n">Primer acierto</th>{% endif %}
+            {% if summary.meta.number == 3 %}<th class="n"><button class="sort" type="button">C</button></th>{% endif %}
+            <th>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in summary.rows %}
+          <tr>
+            <td><a href="{{ url_for('sesion', run_id=row.run.id, **filters.query()) }}#e{{ summary.meta.number }}">{{ row.run.pin }}</a></td>
+            <td>{{ row.run.sheet.participant or '—' }}</td>
+            <td class="n">{{ row.G if row.G is not none else '—' }}</td>
+            <td class="n">{{ row.seconds|num if row.seconds is not none else '—' }}</td>
+            <td class="n">{{ row.N if row.N is not none else '—' }}</td>
+            {% if summary.meta.number != 3 %}
+            <td class="n">{{ row.F if row.F is not none else '—' }}</td>
+            <td class="n">{{ row.PF|num if row.PF is not none else '—' }}</td>
+            {% endif %}
+            {% if summary.meta.events_key == 'attempts' %}
+            <td class="n">{{ row.K if row.K is not none else '—' }}</td>
+            {% else %}
+            <td class="n">{% if row.M %}{{ row.A }} de {{ row.M }}{% else %}—{% endif %}</td>
+            {% endif %}
+            {% if summary.meta.number == 3 %}<td class="n">{{ row.C if row.C is not none else '—' }}</td>{% endif %}
+            <td class="sub">{{ [row.gWhy, row.timeWhy if row.seconds is none and row.timeWhy != row.gWhy else '']|select|join(' · ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</div>
+{% endfor %}
+
+<div class="section-head" id="pilares">
+  <h2>Evidencia complementaria de los pilares</h2>
+  <p class="sub">De la ficha de cada sesión: dos criterios por pilar, valorados por quien observa. {{ with_sheet }} de {{ runs|length }} sesiones tienen ficha.</p>
+</div>
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Pilar</th><th>Criterios</th>
+          <th class="n" title="Sesiones con los dos criterios observados (1 o 0)">Sesiones valoradas</th>
+          <th class="n">0 %</th><th class="n">50 %</th><th class="n">100 %</th>
+          <th class="n" title="Promedio del porcentaje de esta lista de dos criterios">Promedio</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pillars %}
+        <tr>
+          <td class="nowrap"><strong>{{ row.name }}</strong></td>
+          <td class="sub">1. {{ row.criteria[0] }}<br>2. {{ row.criteria[1] }}</td>
+          <td class="n">{{ row.n }}</td>
+          {% for count in row.spread %}<td class="n">{{ count if row.n else '—' }}</td>{% endfor %}
+          <td class="n">{{ (row.mean|num ~ ' %') if row.mean is not none else 'sin dato' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="figure-note">El resultado es 0, 50 o 100 % de esta lista de dos criterios, no un porcentaje de dominio del pilar. La ficha se rellena en la página de cada sesión.</p>
+</div>
+{% endif %}
+{% endblock %}

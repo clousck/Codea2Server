@@ -30,7 +30,7 @@ class Dataset:
             built[file.name] = cached
             entry = state.get(file.name) or {}
             runs.append(replace(cached[1], excluded=bool(entry.get("excluded")),
-                                note=str(entry.get("note") or "")))
+                                note=str(entry.get("note") or ""), sheet=entry))
         self._built = built
 
         extra = cross_checks(runs)

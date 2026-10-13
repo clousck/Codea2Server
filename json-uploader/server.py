@@ -16,7 +16,7 @@ from flask import (Flask, Response, abort, flash, redirect, render_template, req
 from flask.sessions import SecureCookieSessionInterface
 from werkzeug.utils import secure_filename
 
-from codea2 import exports, stats, tables
+from codea2 import exports, metrics, sheet, stats, tables
 from codea2.dataset import Dataset
 from codea2.model import DIFFICULTIES, SCENARIOS, ZONE, Filters
 from codea2.store import ALLOWED_EXTENSIONS, Store
@@ -164,7 +164,7 @@ def _safe_next(target):
     """Solo rutas de este mismo sitio: nunca redirigir a donde diga un enlace ajeno."""
     parts = urlsplit(target or "")
     if parts.scheme or parts.netloc or not parts.path.startswith("/") or parts.path.startswith("//"):
-        return url_for("resumen")
+        return url_for("metricas")
     return target
 
 
@@ -207,7 +207,7 @@ def _scope():
     """El recorte de la URL y las sesiones que deja: lo que comparten páginas y descargas."""
     filters = Filters.from_args(request.args)
     matching = filters.apply(dataset.runs(), with_excluded=True)
-    included = [r for r in matching if not r.excluded]
+    included = [r for r in matching if not r.left_out]
     return {
         "filters": filters,
         "matching": matching,
@@ -217,6 +217,25 @@ def _scope():
 
 
 @app.route("/")
+@viewer
+def metricas():
+    scope = _scope()
+    filters, runs = scope["filters"], scope["runs"]
+    if filters.difficulty is None:
+        # Las dificultades no se mezclan: sin elegir, se entra por la que más sesiones tiene
+        counts = [sum(1 for r in runs if r.difficulty == d) for d in DIFFICULTIES]
+        busiest = list(DIFFICULTIES)[counts.index(max(counts))]
+        return redirect(url_for("metricas", **filters.query(difficulty=busiest)))
+    return render_template(
+        "metricas.html", **scope,
+        summaries=[metrics.scenario_summary(runs, number) for number in SCENARIOS],
+        pillars=metrics.pillar_summary(runs),
+        with_sheet=metrics.with_sheet(runs),
+        legacy_count=sum(1 for r in scope["matching"] if r.legacy and not r.excluded and r.left_out),
+    )
+
+
+@app.route("/exploracion")
 @viewer
 def resumen():
     scope = _scope()
@@ -247,7 +266,8 @@ def sesion(run_id):
         abort(404, description="No hay ninguna sesión con ese nombre.")
     index = runs.index(run)
     return render_template(
-        "sesion.html", run=run,
+        "sesion.html", run=run, sheet=sheet,
+        measures={n: metrics.scenario_metrics(run, n) for n in run.scenarios},
         previous=runs[index - 1] if index else None,
         following=runs[index + 1] if index + 1 < len(runs) else None,
         timeline=stats.timeline(run),
@@ -266,7 +286,8 @@ def sesion_estado(run_id):
     excluded = request.form.getlist("excluded")
     store.set_state(run.file.name,
                     excluded=excluded[-1] == "1" if excluded else None,
-                    note=request.form.get("note"))
+                    note=request.form.get("note"),
+                    **sheet.from_form(request.form))
     if request.headers.get("X-Requested-With") == "fetch":
         return {"status": "ok"}
     target = request.form.get("next")
