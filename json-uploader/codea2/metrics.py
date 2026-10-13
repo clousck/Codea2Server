@@ -67,13 +67,17 @@ def scenario_metrics(run, number):
     closure = run.sheet.get("closure", "")
     row = dict.fromkeys(("G", "N", "F", "PF", "K", "A", "M", "P1", "C", "pairs", "pairsExcluded",
                          "unsolved", "seconds"))
-    row.update(run=run, number=number, started=scenario.started, gWhy="", timeWhy="")
+    row.update(run=run, number=number, started=scenario.started, gWhy="", timeWhy="",
+               timedOut=scenario.timed_out if "timedOut" in scenario.raw else None)
 
     # MC1 · logro final
     if not scenario.started:
         row["gWhy"] = "no iniciado"
     elif scenario.completed:
         row["G"] = 1
+    elif scenario.timed_out:
+        # El propio juego cerró la sala por tiempo: es un resultado final, no un registro a medias
+        row["G"] = 0
     elif closure == "tecnica":
         row["gWhy"] = "interrupción técnica"
     elif run.ended_at or closure in ("tiempo", "abandono"):
@@ -86,7 +90,7 @@ def scenario_metrics(run, number):
     if not scenario.started:
         row["timeWhy"] = "no iniciado"
     elif not scenario.completed:
-        row["timeWhy"] = "no completado"
+        row["timeWhy"] = "tiempo agotado" if scenario.timed_out else "no completado"
     elif not scenario.total_seconds:
         row["timeWhy"] = "sin tiempo registrado"
     elif codes & _TIME_ISSUES:
@@ -242,14 +246,16 @@ def scenario_summary(runs, number):
     cards = [
         _card("MC1", "Logro final", _pct(_percent(done, len(evaluable))),
               f"{done} de {len(evaluable)} {'sesión evaluable' if len(evaluable) == 1 else 'sesiones evaluables'}",
-              "Escenarios completados entre sesiones con resultado final válido. No entran los no "
-              "iniciados ni las interrupciones técnicas sin resultado confirmado.",
-              [("Excluidas", ", ".join(f"{n} {why}" for why, n in excluded.items()) or "ninguna")],
+              "Escenarios completados entre sesiones con resultado final válido. Una sala que agota "
+              "su tiempo cuenta como no completada. No entran los no iniciados ni las interrupciones "
+              "técnicas sin resultado confirmado.",
+              [("Tiempo agotado", f"{sum(1 for r in rows if r['timedOut'])} de {len(evaluable)}"),
+               ("Excluidas", ", ".join(f"{n} {why}" for why, n in excluded.items()) or "ninguna")],
               ratio=done / len(evaluable) if evaluable else None),
         _card("MC2", "Tiempo registrado", f"{_num(times['median'])}\u00a0s" if times["n"] else "sin dato",
               "mediana de quienes lo completaron",
-              "totalSeconds del escenario, tal como lo registra la aplicación: incluye la narración de "
-              "la sala. No es tiempo activo ni de razonamiento. Solo entran los cronómetros sin avisos.",
+              "totalSeconds del escenario, tal como lo registra la aplicación. No es tiempo activo ni "
+              "de razonamiento. Solo entran los escenarios completados con el cronómetro sin avisos.",
               [("En minutos", f"{_num(times['median'] / 60, 2)}\u00a0min" if times["n"] else "sin dato"),
                ("Rango", _spread(times, _num, "\u00a0s")),
                ("Sin validar", ", ".join(f"{n} {why}" for why, n in untimed.items()) or "ninguno")]),
@@ -368,6 +374,7 @@ def analysis_table(runs):
         Column("scenario", "int", "Número de escenario (1 a 4)"),
         Column("scenarioName", "text", "Nombre del escenario en el documento de métricas"),
         Column("G", "flag", "MC1 · Logro final: 1 completado, 0 no completado. Vacío si no es evaluable"),
+        Column("timedOut", "flag", "1 si la sala agotó su tiempo y la historia pasó a la siguiente. Vacío en los JSON que no lo traen"),
         Column("G_excluded", "text", "Por qué G no es evaluable: no iniciado, interrupción técnica o sin cierre confirmado"),
         Column("totalSeconds", "float", "MC2 · Tiempo registrado por la aplicación, solo si se completó y su cronómetro no tiene avisos"),
         Column("time_excluded", "text", "Por qué el tiempo no entra en MC2"),
@@ -396,7 +403,7 @@ def analysis_table(runs):
             row.update({key: run.sheet.get(key, "") for key in ("participant", "moment", "help", "closure", "gameVersion")})
             row.update({
                 "scenario": number, "scenarioName": TITLES[number][0],
-                "G": m["G"], "G_excluded": m["gWhy"],
+                "G": m["G"], "timedOut": m["timedOut"], "G_excluded": m["gWhy"],
                 "totalSeconds": m["seconds"], "time_excluded": m["timeWhy"] if m["seconds"] is None else "",
                 "N": m["N"], "F": m["F"], "errorPct": m["PF"], "K": m["K"], "unsolved": m["unsolved"],
                 "firstCorrect": m["A"], "firstObserved": m["M"], "firstPct": m["P1"],

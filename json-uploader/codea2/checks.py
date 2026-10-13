@@ -74,8 +74,12 @@ def _check_scenario(run, number, scenario, add):
         if solved:
             add("resuelto_sin_completar", "Hay un intento resuelto, pero el escenario no figura "
                                           "como completado.", number)
-        if later_started:
+        # Una sala que agota su tiempo cede el paso a la siguiente: ahí no hay nada raro
+        if later_started and not scenario.timed_out:
             add("sin_completar", "Quedó sin completar, pero un escenario posterior sí se inició.", number)
+
+    if scenario.completed and scenario.timed_out:
+        add("agotado_y_completado", "Figura a la vez como completado y con el tiempo agotado.", number)
 
     stamps = [parse_utc(e.get("timestamp")) for e in events]
     if scenario.started_at:

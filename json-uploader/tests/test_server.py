@@ -451,6 +451,19 @@ class MetricsTest(ServerCase):
         self.assertEqual(self.analysis()[("0109_9_00000.json", "3")]["G_excluded"], "interrupción técnica")
         self.assertEqual(self.status("/?dif=1"), 200)
 
+    def test_room_that_runs_out_of_time_is_a_final_result(self):
+        # Desde el 12/10/2026 cada sala tiene 5 minutos: al agotarlos se pasa a la siguiente
+        data = json.loads((CURRENT / "0101_5_00000.json").read_text(encoding="utf-8-sig"))
+        data["escenario2"].update(completed=False, timedOut=True)
+        data["endedUtc"] = ""
+        self.put("0109_9_00000.json", json.dumps(dict(data, pin="0109", sessionId=9)).encode())
+        row = self.analysis()[("0109_9_00000.json", "2")]
+        self.assertEqual((row["G"], row["timedOut"], row["G_excluded"], row["time_excluded"]),
+                         ("0", "1", "", "tiempo agotado"))
+        self.assertNotIn("sin_completar", {i.code for i in server.dataset.get("0109_9_00000").issues})
+        self.assertEqual({r["file"]: r["e2_timedOut"] for r in self.rows("sesiones")}["0109_9_00000.json"], "1")
+        self.assertEqual(self.status("/sesiones/0109_9_00000"), 200)
+
     def test_session_sheet(self):
         response = self.post_sheet("0101_5_00000", participant=" P-07 ", moment="final", help="verbal",
                                    closure="completada", gameVersion="1.4", p_patrones_1="1", p_patrones_2="0",

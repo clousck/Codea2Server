@@ -78,6 +78,8 @@ Siguen el documento «Métricas por escenario de CODEA2» (09/10/2026). Las regl
   porcentaje con denominador cero).
 - **MC1** excluye del denominador los escenarios no iniciados, los que quedan sin cierre
   confirmado y las interrupciones técnicas. El *motivo de cierre* de la ficha decide los dudosos.
+  Una sala que agota sus 5 minutos (`timedOut`, desde el 12/10/2026) es un resultado final:
+  cuenta como no completada, y la tarjeta dice cuántas hubo.
 - **MC2** solo usa el tiempo de escenarios completados cuyo cronómetro no tiene avisos
   (`evento_antes`, `evento_despues`, `tiempo_distinto`).
 - Los porcentajes son el promedio de los porcentajes de cada sesión; el global (suma de F entre
@@ -119,6 +121,8 @@ Todas llevan `file`, `pin`, `deviceId`, `sessionId` y `difficulty`. `file` es la
 - Los tiempos van en segundos, redondeados a milésimas.
 - `pin` es texto. Para Excel, descargar el **.xlsx**: al abrir un CSV, Excel convierte `0101` en `101`.
 - Si un APK nuevo añade campos al JSON, aparecen solos al final de su tabla.
+- `timedOut` (la sala agotó su tiempo y la historia siguió) existe desde el 12/10/2026; en los
+  JSON anteriores queda vacío.
 - **Conviven dos formatos de JSON** (el del visor cambió el 06/10/2026) y las tablas los juntan.
   Lo que un formato no trae queda vacío: `deviceId`, `totalSeconds` de la sesión,
   `blocksConnected`, `blockResets`, `errorInvalidUse` y el `durationSeconds` de selecciones y
@@ -153,6 +157,7 @@ mal capturado, sesión por sesión. Son avisos, no errores: un cero puede ser le
 | `evento_antes` | Un evento anterior al inicio de su escenario: el reto se abrió tarde y `totalSeconds` se queda corto |
 | `tiempo_distinto` | `totalSeconds` y el reloj difieren en más de 2 s |
 | `sin_tipo` | Intento del escenario 3 sin `itemType` |
+| `agotado_y_completado` | Un escenario figura a la vez como completado y con el tiempo agotado |
 | `contador` | Un contador no coincide con lo que hay en su lista |
 | `agarres` | Se soltó más de lo que se agarró: agarres atribuidos a otro escenario |
 | `no_iniciado`, `sin_completar`, `eventos_sin_inicio`, `sin_eventos`, `sin_resuelto`, `resuelto_sin_completar`, `sin_registro`, `sin_inicio` | Un escenario cuyo estado no cuadra con sus eventos o con los escenarios siguientes |
@@ -174,7 +179,9 @@ protecciones, para no perder datos nunca:
 - **Otra sesión con el mismo nombre no se pisa.** El `deviceId` ya distingue a los visores, pero
   si aun así lo guardado es otra sesión (otro `startedUtc`), la nueva se guarda con sufijo
   (`0101_5_A1B2C-2.json`) y el panel avisa.
-- **Resubir la misma sesión conserva la versión anterior** en `uploads/.versiones/`.
+- **Resubir la misma sesión conserva la versión anterior** en `uploads/.versiones/`. El visor
+  resube solo, con el mismo nombre, una sesión que subió a medias y luego siguió: lo que queda
+  visible es siempre lo último.
 
 Dentro de `uploads/` el panel solo escribe eso y `.codea2-panel.json` (sesiones excluidas y notas).
 

@@ -160,6 +160,7 @@ class Scenario:
     started_at: datetime | None
     ended_at: datetime | None
     events: tuple
+    timed_out: bool = False  # la sala agotó sus 5 minutos y la historia siguió (desde el 12/10/2026)
 
     @property
     def number(self):
@@ -282,6 +283,7 @@ def build_run(file):
             started_at=parse_utc(raw.get("startedUtc")),
             ended_at=parse_utc(raw.get("endedUtc")),
             events=tuple(e for e in events if isinstance(e, dict)) if isinstance(events, list) else (),
+            timed_out=as_flag(raw.get("timedOut")),
         )
     pin = data.get("pin")
     return Run(

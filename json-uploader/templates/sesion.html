@@ -97,6 +97,7 @@
     <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px">
       <h3>{{ meta.short }} · {{ meta.name }}</h3>
       {% if scenario.completed %}<span class="status ok">Completado en {{ scenario.total_seconds|clock }}</span>
+      {% elif scenario.timed_out %}<span class="status neutral">Tiempo de la sala agotado</span>
       {% elif scenario.started %}<span class="status neutral">Iniciado, sin completar</span>
       {% else %}<span class="sub">No se inició</span>{% endif %}
     </div>

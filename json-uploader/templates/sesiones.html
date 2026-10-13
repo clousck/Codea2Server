@@ -63,6 +63,7 @@
           {% for scenario in run.scenarios.values() %}
           <td class="n" data-v="{{ scenario.total_seconds if scenario.completed and scenario.total_seconds is not none else '' }}">
             {% if scenario.completed %}<span class="status ok" title="Completado">{{ scenario.total_seconds|clock }}</span>
+            {% elif scenario.timed_out %}<span class="status neutral" title="La sala agotó su tiempo">tiempo agotado</span>
             {% elif scenario.started %}<span class="status neutral" title="Iniciado, sin completar">sin completar</span>
             {% else %}<span class="sub" title="No se inició">no iniciado</span>{% endif %}
           </td>

@@ -85,7 +85,7 @@ COUNTER_LABELS = {
     "chipsReleased": "Fichas soltadas",
 }
 
-_SCENARIO_BASE = ("started", "completed", "totalSeconds", "startedUtc", "endedUtc")
+_SCENARIO_BASE = ("started", "completed", "timedOut", "totalSeconds", "startedUtc", "endedUtc")
 _RUN_KNOWN = ("pin", "deviceId", "sessionId", "difficulty", "startedUtc", "endedUtc", "totalSeconds")
 _ATTEMPT_KNOWN = ("difficulty", "sequence", "repetitions", "itemType", "solved", "durationSeconds", "timestamp")
 _SELECTION_KNOWN = ("module", "option", "selected", "correct", "durationSeconds", "timestamp")
@@ -160,6 +160,7 @@ def _session_columns():
         columns += [
             Column(prefix + "started", "flag", f"{label}: 1 si llegó a iniciarse"),
             Column(prefix + "completed", "flag", f"{label}: 1 si se completó"),
+            Column(prefix + "timedOut", "flag", f"{label}: 1 si la sala agotó su tiempo. Vacío en los JSON que no lo traen"),
             Column(prefix + "totalSeconds", "float", f"{label}: segundos que duró, según el juego"),
             Column(prefix + meta.events_key, "int", f"{label}: número de {meta.events_label.lower()}"),
         ]
@@ -214,6 +215,7 @@ def sessions_table(runs):
             prefix, meta = f"e{number}_", scenario.meta
             row[prefix + "started"] = scenario.started
             row[prefix + "completed"] = scenario.completed
+            row[prefix + "timedOut"] = scenario.raw.get("timedOut")
             if not scenario.present:
                 continue
             row[prefix + "totalSeconds"] = scenario.total_seconds
@@ -259,6 +261,8 @@ def scenarios_table(runs):
         Column("scenarioName", "text", "Pilar que trabaja el escenario"),
         Column("started", "flag", "1 si llegó a iniciarse"),
         Column("completed", "flag", "1 si se completó"),
+        Column("timedOut", "flag", "1 si la sala agotó su tiempo y la historia pasó a la siguiente. "
+                                   "Vacío en los JSON que no lo traen"),
         Column("totalSeconds", "float", "Segundos que duró, según el juego. Incluye la narración de la sala"),
         Column("startedUtc", "utc", "Inicio del escenario (UTC)"),
         Column("endedUtc", "utc", "Fin del escenario (UTC)"),
@@ -278,6 +282,7 @@ def scenarios_table(runs):
                 "scenarioName": scenario.meta.name,
                 "started": scenario.started,
                 "completed": scenario.completed,
+                "timedOut": scenario.raw.get("timedOut"),
             })
             if scenario.present:
                 row.update({
