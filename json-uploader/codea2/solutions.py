@@ -5,7 +5,8 @@ sequence de cada intento con la clave, así que también vale para los JSON ante
 22/10/2026, que no traen solutionPercent.
 
 La clave copia CodeaSolutions del proyecto de Unity (Scenario1Difficulty.solutions),
-confirmada el 22/10/2026 con intentos resueltos al 100 % en las dos dificultades.
+confirmada el 22/10/2026 con intentos resueltos al 100 % en las dos dificultades. Cada
+dificultad tiene un solo camino válido.
 **Si cambian los niveles del escenario 1, hay que actualizarla aquí**: el aviso
 «clave_distinta» salta cuando el porcentaje del visor no coincide con el de esta clave.
 """

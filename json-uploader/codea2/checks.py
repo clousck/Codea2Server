@@ -130,7 +130,8 @@ def _check_counters(scenario, number, events, add):
                       and solution_percent(e) < 100)
         if partial:
             add("solucion_parcial", f"{partial} intento(s) resuelto(s) con solutionPercent por debajo de 100: "
-                                    "puede faltar una solución en la variante de dificultad.", number)
+                                    "cada dificultad tiene una sola solución, así que la sesión viene de un APK "
+                                    "anterior o el juego aceptó una secuencia que no es la solución.", number)
 
     if number == 1:
         # El visor y el panel calculan lo mismo; si no coinciden, la clave del panel está desfasada
