@@ -1,30 +1,35 @@
-"""Métricas del estudio: dos comunes y tres por escenario.
+"""Métricas del estudio: dos comunes, tres por escenario y el perfil de pilares de cada actividad.
 
-Siguen el documento «Métricas por escenario de CODEA2» del 09/10/2026. Las reglas que
+Siguen el documento «Métricas por escenario de CODEA2» del 19/10/2026. Las reglas que
 importan están aquí y no en las plantillas:
 
 - La unidad es una sesión en un escenario. Las dificultades no se mezclan nunca.
 - Un valor que no se puede calcular queda en None («sin dato»), nunca en cero.
 - Cada porcentaje conserva su numerador y su denominador.
 - En el escenario 3 no hay tasa de fallos: solved = false es una pasada intermedia, no un error.
+- E1P a E4P salen de la ficha, no del JSON: dos criterios por dimensión y actividad, y un
+  porcentaje (0, 50 o 100) solo cuando los dos se evaluaron. Nunca se suman en una nota global.
 
-El documento se escribió con el formato de JSON anterior al 06/10/2026. Con el actual, E1C
-son choques y usos inválidos, y F ya no se puede contrastar con wrongSelections ni
-wrongPlacements, que el visor dejó de mandar.
+El documento nombra campos del formato anterior al 06/10/2026. Con el actual (22/10/2026), E1C
+son choques y usos inválidos (la secuencia incompleta queda en attempts), E3C es failedAttempts
+y comandos inválidos, F se cuenta de la lista porque wrongSelections y wrongPlacements ya no
+vienen, y el escenario 2 trae además sus pruebas (Probar) en attempts. solutionPercent no es
+métrica del documento: se enseña como contexto de E1A y E3A.
 """
 
 from collections import Counter, defaultdict
 
 from . import sheet as ficha
-from .model import SCENARIOS, as_int, is_selected
+from .model import SCENARIOS, as_flag, as_int, is_selected, solution_percent
+from .solutions import SOLUTIONS, compare
 from .stats import describe
 
-# Nombre y pilares de cada escenario, tal como los llama el documento
+# Nombre y pilares de cada escenario, tal como los relaciona la tabla 1.1 del documento
 TITLES = {
-    1: ("Robot y puerta", "Pensamiento algorítmico y descomposición"),
-    2: ("Reparación de la nave", "Abstracción y descomposición"),
-    3: ("Brazo robótico", "Pensamiento algorítmico y reconocimiento de patrones"),
-    4: ("Chips y receptáculos", "Reconocimiento de patrones y abstracción"),
+    1: ("Robot y puerta", "Pensamiento algorítmico; descomposición si explica qué parte del plan corrigió"),
+    2: ("Reparación de la nave", "Toma de decisiones y descomposición; patrones si aplica la regla a otro módulo"),
+    3: ("Brazo robótico", "Pensamiento algorítmico; patrones si explica cómo adaptó la secuencia o la repetición"),
+    4: ("Chips y receptáculos", "Reconocimiento de patrones y toma de decisiones"),
 }
 
 # Avisos que ponen en duda el cronómetro de un escenario
@@ -70,7 +75,8 @@ def scenario_metrics(run, number):
     scenario = run.scenarios[number]
     closure = run.sheet.get("closure", "")
     row = dict.fromkeys(("G", "N", "F", "PF", "K", "A", "M", "P1", "C", "pairs", "pairsExcluded",
-                         "unsolved", "seconds", "recorded"))
+                         "unsolved", "seconds", "recorded", "S1", "Smean", "Sbest", "Sn", "tries", "failedTries",
+                         "I1missing", "I1extra", "I1order", "Imissing", "Iextra", "Iorder", "In"))
     row.update(run=run, number=number, started=scenario.started, gWhy="", timeWhy="",
                timedOut=scenario.timed_out if "timedOut" in scenario.raw else None)
 
@@ -114,7 +120,27 @@ def scenario_metrics(run, number):
         solved = [ok for ok in (_outcome(e, "solved") for e in events) if ok is not None]
         row["N"] = len(solved)
         row["K"] = _first(solved)
+        # Contexto, no métrica del documento: lo cerca que quedó el primer intento de la solución
+        row["S1"] = next((v for v in (solution_percent(e) for e in events if _outcome(e, "solved") is not None)), None)
         if number == 1:
+            # E1S: solutionPercent de los intentos que no resolvieron (el que resuelve vale 100)
+            failed = [solution_percent(e) for e in events if _outcome(e, "solved") is False]
+            failed = [v for v in failed if v is not None]
+            row["Sn"] = len(failed)
+            row["Smean"] = sum(failed) / len(failed) if failed else None
+            row["Sbest"] = max(failed) if failed else None
+            # E1I: número y orden de instrucciones frente a la clave de soluciones
+            keyed = [(compare(e.get("sequence"), run.difficulty), _outcome(e, "solved")) for e in events]
+            keyed = [(k, ok) for k, ok in keyed if k is not None and ok is not None]
+            if keyed:
+                first = keyed[0][0]
+                row.update(I1missing=first["missing"], I1extra=first["extra"], I1order=first["orderPct"])
+            wrong = [k for k, ok in keyed if not ok]
+            if wrong:
+                orders = [k["orderPct"] for k in wrong if k["orderPct"] is not None]
+                row.update(In=len(wrong), Imissing=sum(k["missing"] for k in wrong) / len(wrong),
+                           Iextra=sum(k["extra"] for k in wrong) / len(wrong),
+                           Iorder=sum(orders) / len(orders) if orders else None)
             row["F"] = solved.count(False)
             row["PF"] = _percent(row["F"], row["N"])
         else:
@@ -131,6 +157,9 @@ def scenario_metrics(run, number):
         row["M"] = len(first)
         row["A"] = sum(first.values())
         row["P1"] = _percent(row["A"], row["M"])
+        if scenario.has_tries:
+            row["tries"] = len(scenario.tries)
+            row["failedTries"] = sum(1 for e in scenario.tries if not as_flag(e.get("solved")))
     return row
 
 
@@ -234,6 +263,86 @@ def _breakdown(runs, number, group_key):
             for name, g in sorted(groups.items())]
 
 
+def _closeness_line(rows):
+    stats = describe(r["S1"] for r in rows)
+    if not stats["n"]:
+        return "Cercanía del 1.er intento", "sin dato (JSON anteriores al 22/10/2026)"
+    return "Cercanía del 1.er intento", f"mediana {_num(stats['median'], 0)}\u00a0% · n = {stats['n']}"
+
+
+def _solution_card(rows):
+    """E1S: lo cerca que quedaron de la solución, en número y orden de instrucciones.
+
+    No es una métrica del documento: la calcula el visor (solutionPercent, desde el 22/10/2026).
+    """
+    first = describe(r["S1"] for r in rows)
+    mean = describe(r["Smean"] for r in rows)
+    best = describe(r["Sbest"] for r in rows)
+    stuck = describe(r["Sbest"] for r in rows if r["K"] is None)
+    pct = lambda stats: f"mediana {_num(stats['median'], 0)}\u00a0%" if stats["n"] else "sin dato"
+    return _card("E1S", "Cercanía a la solución", f"{_num(first['median'], 0)}\u00a0%" if first["n"] else "sin dato",
+                 f"mediana del 1.er intento en {first['n']} {'sesión' if first['n'] == 1 else 'sesiones'}",
+                 "solutionPercent del visor: subsecuencia común más larga entre el intento y la solución más "
+                 "cercana, dividida entre la más larga de las dos. Resta si falta o sobra una instrucción y "
+                 "si está fuera de orden; no separa las dos cosas. Un -1 (sin solución cargada) queda sin dato. "
+                 "Complemento de E1A y E1B, no métrica del documento.",
+                 [("Intentos fallidos", pct(mean) + (f" (media por sesión, n = {mean['n']})" if mean["n"] else "")),
+                  ("Mejor sin resolver", pct(best)),
+                  ("Sin resolución", pct(stuck) + " de su mejor intento" if stuck["n"] else "ninguna con dato")],
+                 ratio=first["median"] / 100 if first["n"] else None)
+
+
+def _instructions_card(rows):
+    """E1I: separa lo que solutionPercent mezcla, comparando cada secuencia con la clave de soluciones."""
+    order = describe(r["I1order"] for r in rows)
+    missing = describe(r["I1missing"] for r in rows)
+    extra = describe(r["I1extra"] for r in rows)
+    failed_order = describe(r["Iorder"] for r in rows)
+    failed_missing = describe(r["Imissing"] for r in rows)
+    failed_extra = describe(r["Iextra"] for r in rows)
+    sizes = " · ".join(f"{'básica' if d == 1 else 'intermedia'} {len(s[0])}" for d, s in SOLUTIONS.items())
+
+    def counts(a, b):
+        if not a["n"]:
+            return "sin dato"
+        return f"faltan {_count(a['median'])} · sobran {_count(b['median'])} (medianas)"
+
+    return _card("E1I", "Número y orden de instrucciones",
+                 f"{_num(order['median'], 0)}\u00a0%" if order["n"] else "sin dato",
+                 f"en orden en el 1.er intento, mediana de {order['n']} {'sesión' if order['n'] == 1 else 'sesiones'}",
+                 "Cada secuencia frente a la solución de su dificultad (clave de CodeaSolutions). Número: "
+                 "instrucciones de la solución que faltan y que sobran, sin mirar el orden. Orden: de las "
+                 "instrucciones que coinciden, cuántas están en el orden de la solución. Complemento de E1A y "
+                 "E1B, no métrica del documento.",
+                 [("1.er intento", counts(missing, extra)),
+                  ("Intentos fallidos", counts(failed_missing, failed_extra)),
+                  ("Orden en fallidos", f"mediana {_num(failed_order['median'], 0)}\u00a0%" if failed_order["n"]
+                   else "sin dato"),
+                  ("Clave", f"{sizes} instrucciones")],
+                 ratio=order["median"] / 100 if order["n"] else None)
+
+
+def profile_summary(runs, number):
+    """E1P a E4P: cada dimensión por separado, con las sesiones completas y las pendientes (sección 7.7)."""
+    started = [run for run in runs if run.scenarios[number].started]
+    rows = []
+    for key, (name, short, code, _, _) in ficha.PILLARS.items():
+        profiles = [ficha.profile(run.sheet, number, key) for run in started]
+        scores = [p["P"] for p in profiles if p["P"] is not None]
+        observed, criteria, question = ficha.MATRIX[number][key]
+        rows.append({
+            "key": key, "name": name, "short": short, "code": code,
+            "criteria": (observed, criteria), "question": question,
+            "n": len(scores),
+            "pending": len(profiles) - len(scores),
+            "partial": sum(1 for p in profiles if p["P"] is None and p["valued"]),
+            "spread": [scores.count(value) for value in (0, 50, 100)],
+            "mean": sum(scores) / len(scores) if scores else None,
+        })
+    return {"code": f"E{number}P", "sessions": len(started), "rows": rows,
+            "with_sheet": sum(1 for run in started if ficha.has_profile(run.sheet, number))}
+
+
 def _required_sockets(rows):
     """Receptáculos del nivel: los que resolvió quien lo completó. None si nadie lo completó aún."""
     solved = [r["M"] for r in rows if r["G"] == 1 and r["M"]]
@@ -287,11 +396,15 @@ def scenario_summary(runs, number):
                        "F son los intentos con solved = false y N todos los intentos con resultado. "
                        "Describe el proceso; no es una calificación.", "intentos"),
             _card("E1C", "Errores por tipo", "", "contadores de la aplicación, por separado",
-                  "No se suman entre sí ni con F: un intento puede disparar varios. Desde el 06/10/2026 "
-                  "son choques y usos inválidos; el formato anterior traía tres contadores.",
+                  "No se suman entre sí ni con F: un intento puede disparar varios. El documento nombra "
+                  "colisión, secuencia incompleta y comando inválido; el visor manda choques (colisión) y "
+                  "usos inválidos (comando inválido). La secuencia incompleta no tiene contador: se ejecuta "
+                  "y queda en los intentos.",
                   [_counter_line(started, "errorCollisionBot", "Choques"),
                    _counter_line(started, "errorInvalidUse", "Usos inválidos"),
                    _counter_line(started, "failedAttempts", "failedAttempts")]),
+            _solution_card(started),
+            _instructions_card(started),
         ]
     elif number == 3:
         changes = describe(r["C"] for r in started)
@@ -302,7 +415,7 @@ def scenario_summary(runs, number):
                   "fallo: el reto pide al menos dos pasadas, una por tipo de objeto.",
                   [("Promedio de K", _num(firsts["mean"])), ("Rango de K", _spread(firsts)),
                    ("Sin resolución", f"{unresolved} de {len(started)}"),
-                   ("Ejecuciones N", f"mediana {_count(totals['median'])}")]),
+                   ("Ejecuciones N", f"mediana {_count(totals['median'])}"), _closeness_line(started)]),
             _card("E3B", "Cambios del plan", _count(changes["median"]),
                   f"mediana de C en {changes['n']} con pares evaluables",
                   "Pares de ejecuciones consecutivas en los que cambia la secuencia, las repeticiones "
@@ -311,8 +424,10 @@ def scenario_summary(runs, number):
                    ("Pares evaluables", str(sum(r["pairs"] or 0 for r in started))),
                    ("Pares excluidos", str(sum(r["pairsExcluded"] or 0 for r in started)))]),
             _card("E3C", "Errores reportados", "", "contadores de la aplicación, por separado",
-                  "failedAttempts solo cuenta la pasada que no clasificó nada. No se calcula una tasa "
-                  "de fallos de este escenario.",
+                  "Se guardan por separado y no se sustituyen entre sí: failedAttempts solo cuenta la "
+                  "pasada que no clasificó nada. Colisión y secuencia incompleta no aplican aquí: no hay "
+                  "robot que choque y la fila incompleta cuenta como comando inválido. No se calcula una "
+                  "tasa de fallos de este escenario.",
                   [_counter_line(started, "failedAttempts", "failedAttempts"),
                    _counter_line(started, "errorInvalidCommand", "Comandos inválidos")]),
         ]
@@ -335,6 +450,12 @@ def scenario_summary(runs, number):
                         "una primera decisión. Lo que se acierta después de corregir no cuenta.",
                         units, required),
         ]
+        if number == 2:
+            tried = [r for r in started if r["tries"] is not None]
+            cards[-2]["lines"].append(
+                ("Pruebas fallidas", f"{sum(r['failedTries'] for r in tried)} de {sum(r['tries'] for r in tried)} "
+                                     f"(failedAttempts, en {len(tried)} {'sesión' if len(tried) == 1 else 'sesiones'})" if tried
+                 else "sin dato (JSON anteriores al 22/10/2026)"))
         breakdown = _breakdown(runs, number, group_key)
         group_label = "Módulo" if number == 2 else "Receptáculo"
 
@@ -347,22 +468,8 @@ def scenario_summary(runs, number):
         "breakdown": breakdown,
         "group_label": group_label,
         "rows": [r for r in rows if r["started"]],
+        "profile": profile_summary(runs, number),
     }
-
-
-def pillar_summary(runs):
-    """Sección 7: cuántas sesiones tienen los dos criterios de cada pilar y qué puntuación dan."""
-    rows = []
-    for key, (name, first, second) in ficha.PILLARS.items():
-        scores = [s for s in (ficha.pillar_score(run.sheet, key) for run in runs) if s is not None]
-        rows.append({"name": name, "criteria": (first, second), "n": len(scores),
-                     "mean": sum(scores) / len(scores) if scores else None,
-                     "spread": [scores.count(value) for value in (0, 50, 100)]})
-    return rows
-
-
-def with_sheet(runs):
-    return sum(1 for run in runs if any(run.sheet.get(key) for key in ("participant", "moment", "closure", "help")))
 
 
 # ── Tabla de análisis (sección 9.1) ───────────────────────────────────────────
@@ -377,6 +484,7 @@ def analysis_table(runs):
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
         Column("closure", "text", "Motivo de cierre, de la ficha"),
+        Column("observer", "text", "Quién observó, de la ficha"),
         Column("gameVersion", "text", "Versión del juego, de la ficha"),
         Column("scenario", "int", "Número de escenario (1 a 4)"),
         Column("scenarioName", "text", "Nombre del escenario en el documento de métricas"),
@@ -401,6 +509,26 @@ def analysis_table(runs):
         Column("errorCollisionBot", "int", "E1C · Choques"),
         Column("errorInvalidUse", "int", "E1C · Usos inválidos"),
         Column("errorInvalidCommand", "int", "E3C · Comandos inválidos"),
+        Column("tries", "int", "E2 · Pruebas (Probar). Vacío en los demás escenarios y en los JSON anteriores al 22/10/2026"),
+        Column("failedTries", "int", "E2 · Pruebas que no repararon el módulo"),
+        Column("firstSolutionPercent", "float", "solutionPercent del primer intento o ejecución (E1 y E3). Contexto, "
+                                                "no métrica del documento. Vacío si el juego anotó -1"),
+        Column("failedSolutionPercent", "float", "E1S · Media de solutionPercent de los intentos que no resolvieron"),
+        Column("bestFailedSolutionPercent", "float", "E1S · Mejor solutionPercent entre los intentos que no resolvieron"),
+        Column("failedSolutionCount", "int", "E1S · Intentos sin resolver con solutionPercent válido"),
+        Column("firstMissing", "int", "E1I · Instrucciones de la solución que faltan en el primer intento"),
+        Column("firstExtra", "int", "E1I · Instrucciones que sobran en el primer intento"),
+        Column("firstOrderPct", "float", "E1I · De las instrucciones que coinciden en el primer intento, % en el "
+                                         "orden de la solución"),
+        Column("failedMissing", "float", "E1I · Instrucciones que faltan, media de los intentos que no resolvieron"),
+        Column("failedExtra", "float", "E1I · Instrucciones que sobran, media de los intentos que no resolvieron"),
+        Column("failedOrderPct", "float", "E1I · % en orden, media de los intentos que no resolvieron"),
+        *(column for key, (name, short, code, _, _) in ficha.PILLARS.items() for column in (
+            Column(f"{short}_C", "int", f"E1P a E4P · {name} ({code}): criterios con 1. Vacío si no se valoró ninguno"),
+            Column(f"{short}_E", "int", f"E1P a E4P · {name} ({code}): criterios evaluados con 0 o 1, de 2"),
+            Column(f"{short}_P", "int", f"E1P a E4P · {name} ({code}): 0, 50 o 100 solo con los dos evaluados. "
+                                        "Vacío es NC. No es un porcentaje de dominio"),
+        )),
         Column("issues", "text", "Avisos de integridad de este escenario en esta sesión"),
     )
     rows = []
@@ -408,7 +536,7 @@ def analysis_table(runs):
         for number in SCENARIOS:
             m = scenario_metrics(run, number)
             row = _keys(run)
-            row.update({key: run.sheet.get(key, "") for key in ("participant", "moment", "help", "closure", "gameVersion")})
+            row.update({key: run.sheet.get(key, "") for key in ficha.SESSION_FIELDS})
             row.update({
                 "scenario": number, "scenarioName": TITLES[number][0],
                 "G": m["G"], "timedOut": m["timedOut"], "G_excluded": m["gWhy"],
@@ -419,10 +547,68 @@ def analysis_table(runs):
                 "planChanges": m["C"], "pairsEvaluable": m["pairs"], "pairsExcluded": m["pairsExcluded"],
                 "failedAttempts": m["failedAttempts"], "errorCollisionBot": m["errorCollisionBot"],
                 "errorInvalidUse": m["errorInvalidUse"], "errorInvalidCommand": m["errorInvalidCommand"],
+                "tries": m["tries"], "failedTries": m["failedTries"], "firstSolutionPercent": m["S1"],
+                "failedSolutionPercent": m["Smean"], "bestFailedSolutionPercent": m["Sbest"],
+                "failedSolutionCount": m["Sn"],
+                "firstMissing": m["I1missing"], "firstExtra": m["I1extra"], "firstOrderPct": m["I1order"],
+                "failedMissing": m["Imissing"], "failedExtra": m["Iextra"], "failedOrderPct": m["Iorder"],
                 "issues": " ".join(sorted({i.code for i in run.issues if i.scenario == number})),
             })
+            for key, (_, short, _, _, _) in ficha.PILLARS.items():
+                profile = ficha.profile(run.sheet, number, key)
+                if profile["valued"]:
+                    row.update({f"{short}_C": profile["C"], f"{short}_E": profile["E"], f"{short}_P": profile["P"]})
             rows.append(row)
     return Table(
         "analisis", "Análisis",
-        "La tabla del estudio: una fila por sesión y escenario con las métricas del documento del 09/10/2026.",
+        "La tabla del estudio: una fila por sesión y escenario con las métricas del documento del 19/10/2026.",
+        columns, tuple(rows))
+
+
+def pillars_table(runs):
+    """Sección 7.7: una fila por sesión, escenario y dimensión, con lo valorado en la ficha.
+
+    Solo salen las actividades que la ficha valora: lo que nadie observó no es una fila de ceros.
+    """
+    from .tables import KEYS, Column, Table, _keys
+
+    columns = (
+        *KEYS,
+        Column("participant", "text", "Código de participante, de la ficha"),
+        Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
+        Column("help", "text", "Ayuda recibida, de la ficha"),
+        Column("observer", "text", "Quién observó, de la ficha"),
+        Column("gameVersion", "text", "Versión del juego, de la ficha"),
+        Column("scenario", "int", "Número de escenario (1 a 4)"),
+        Column("profile", "text", "Perfil del documento: E1P, E2P, E3P o E4P"),
+        Column("dimension", "text", "D descomposición, TD toma de decisiones, PA pensamiento algorítmico, "
+                                    "RP reconocimiento de patrones"),
+        Column("record", "text", "Registro de observación: O1 (D), O3 (TD), O4 (PA) u O2 (RP)"),
+        Column("C1", "text", "Criterio 1: 1 se cumple, 0 no se cumple pese a haber oportunidad, NO sin evidencia"),
+        Column("C2", "text", "Criterio 2, con los mismos códigos"),
+        Column("C", "int", "Criterios con 1"),
+        Column("E", "int", "Criterios evaluados con 0 o 1, de 2"),
+        Column("P", "int", "C / 2 × 100 (0, 50 o 100) solo si E = 2. Vacío es NC, no calculable"),
+        Column("evidence1", "text", "Frase, secuencia o esquema que respalda el criterio 1"),
+        Column("evidence2", "text", "Frase, secuencia o esquema que respalda el criterio 2"),
+    )
+    rows = []
+    for run in runs:
+        for number in SCENARIOS:
+            if not ficha.has_profile(run.sheet, number):
+                continue
+            for key, (_, short, code, _, _) in ficha.PILLARS.items():
+                profile = ficha.profile(run.sheet, number, key)
+                row = _keys(run)
+                row.update({k: run.sheet.get(k, "") for k in ("participant", "moment", "help", "observer", "gameVersion")})
+                row.update({
+                    "scenario": number, "profile": f"E{number}P", "dimension": short, "record": code,
+                    "C1": profile["c1"], "C2": profile["c2"], "C": profile["C"], "E": profile["E"], "P": profile["P"],
+                    "evidence1": run.sheet.get(ficha.evidence(number, key, 1), ""),
+                    "evidence2": run.sheet.get(ficha.evidence(number, key, 2), ""),
+                })
+                rows.append(row)
+    return Table(
+        "pilares", "Pilares",
+        "El perfil de evidencias de cada actividad (E1P a E4P): una fila por sesión, escenario y dimensión.",
         columns, tuple(rows))

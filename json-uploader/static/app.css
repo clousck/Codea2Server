@@ -423,4 +423,6 @@ footer { max-width: 1240px; margin: 0 auto; padding: 0 24px 32px; font-size: 12.
 .ficha-row label { display: grid; gap: 3px; font-size: 12.5px; color: var(--ink-2); }
 .ficha-row input[type="text"] { width: 240px; }
 .ficha td select { margin-top: 4px; }
-.ficha td textarea { min-height: 56px; min-width: 220px; }
+.ficha td textarea { display: block; width: 100%; min-height: 56px; min-width: 220px; margin-top: 6px; }
+.ficha td { vertical-align: top; }
+.ficha details.table-view { margin-top: 0; }

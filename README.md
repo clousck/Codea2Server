@@ -58,19 +58,19 @@ sirve para subir y no para leer.
 
 | Página | Qué hay |
 |---|---|
-| **Métricas** | La página principal. Por escenario: MC1 logro final, MC2 tiempo registrado y sus tres métricas (E1A–E4C), siempre con numerador, denominador y exclusiones. Una sola dificultad cada vez. Al final, la evidencia de pilares de las fichas |
+| **Métricas** | La página principal. Por escenario: MC1 logro final, MC2 tiempo registrado y sus tres métricas (E1A–E4C), siempre con numerador, denominador y exclusiones, y el perfil de evidencias de los pilares de esa actividad (E1P–E4P). Una sola dificultad cada vez |
 | **Sesiones** | Una fila por partida, ordenable y con buscador. Desde aquí se excluye una sesión del análisis |
-| **Detalle de una sesión** | Sus métricas, línea de tiempo, cada intento, selección y colocación con su hora, avisos de integridad, **ficha de sesión** y JSON original |
+| **Detalle de una sesión** | Sus métricas, línea de tiempo, cada intento (con su cercanía a la solución), selección, prueba y colocación con su hora, avisos de integridad, **ficha de sesión** y JSON original |
 | **Datos** | Las tablas, con vista previa, diccionario de columnas y descarga |
 | **Archivos** | Lo que hay en `uploads/` y su estado. Subida a mano de los JSON sacados del visor por cable |
-| **Exploración** | Lo que no es métrica del estudio pero ayuda a preparar preguntas: tiempos sesión a sesión, secuencias probadas, qué opción se marcó en cada módulo, qué ficha se puso en cada hueco |
+| **Exploración** | Lo que no es métrica del estudio pero ayuda a preparar preguntas: tiempos sesión a sesión, secuencias probadas, cercanía a la solución intento a intento, qué opción se marcó y cuántas pruebas hizo falta en cada módulo, ajuste del bucle, qué ficha se puso en cada hueco |
 
 Los filtros de arriba (fechas, dificultad, PIN) valen para todo lo que hay debajo **y para las
 descargas**. En PIN se pueden poner varios, comodines y descartes: `0101 02* -0000`.
 
 ### Las métricas
 
-Siguen el documento «Métricas por escenario de CODEA2» (09/10/2026). Las reglas están en
+Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las reglas están en
 `codea2/metrics.py`:
 
 - La unidad es una sesión en un escenario; las dificultades no se mezclan.
@@ -85,15 +85,35 @@ Siguen el documento «Métricas por escenario de CODEA2» (09/10/2026). Las regl
 - Los porcentajes son el promedio de los porcentajes de cada sesión; el global (suma de F entre
   suma de N) se muestra al lado.
 - En el escenario 3 no hay tasa de fallos: `solved = false` es una pasada intermedia.
-- El documento se escribió con el formato de JSON anterior. Con el actual, E1C son choques y
-  usos inválidos, y F ya no se contrasta con `wrongSelections` ni `wrongPlacements`.
+- El documento nombra campos del formato anterior. Con el actual (22/10/2026), E1C son choques y
+  usos inválidos (la secuencia incompleta queda en `attempts`), E3C es `failedAttempts` y comandos
+  inválidos, y F se cuenta de la lista porque `wrongSelections` y `wrongPlacements` ya no vienen.
+- `solutionPercent` y las pruebas del escenario 2 no son métricas del documento: se enseñan como
+  contexto: en el escenario 1, la tarjeta **E1S · Cercanía a la solución** (primer intento, media
+  y mejor de los fallidos); en el 3, la cercanía del primer intento en E3A; en el 2, las pruebas
+  fallidas en E2B.
+- **E1I · Número y orden de instrucciones** compara cada secuencia del escenario 1 con la solución
+  de su dificultad: instrucciones que faltan y que sobran (sin mirar el orden) y, de las que
+  coinciden, cuántas están en el orden de la solución. Vale también para los JSON anteriores al
+  22/10/2026. La clave copia `CodeaSolutions` de Unity y está en `codea2/solutions.py`: **si
+  cambian los niveles del escenario 1, hay que actualizarla**. El aviso `clave_distinta` salta
+  cuando el `solutionPercent` del visor no coincide con el de la clave. Un `-1` en
+  `solutionPercent` o `remaining` es «sin dato», nunca un cero.
+- **E1P–E4P** (perfil de evidencias de los pilares) salen de la ficha, no del JSON: por cada
+  actividad, dos criterios por dimensión (D descomposición, TD toma de decisiones, PA pensamiento
+  algorítmico, RP reconocimiento de patrones). P vale 0, 50 o 100 solo con los dos criterios
+  evaluados; con un NO queda NC. Las dimensiones no se suman en una nota global. La toma de
+  decisiones sustituye a la abstracción.
 
 ### La ficha de sesión
 
 Lo que el estudio necesita y el visor no sabe. Se rellena en la página de cada sesión: código
-de participante, momento (inicial o final), ayuda recibida, motivo de cierre, versión del juego
-y los dos criterios de cada pilar (1, 0 o NO) con su evidencia. Se guarda en
-`uploads/.codea2-panel.json` y sale en las tablas `sesiones` y `analisis`.
+de participante, momento (inicial o final), ayuda recibida, motivo de cierre, observador, versión
+del juego y, por cada escenario, los dos criterios de cada dimensión (1, 0 o NO) con su evidencia,
+según las matrices del documento. Se guarda en `uploads/.codea2-panel.json` y sale en las tablas
+`sesiones`, `analisis` y `pilares`. Las valoraciones de la ficha anterior (una por sesión, con
+abstracción) siguen guardadas pero no se usan: no se atribuyen a una actividad ni se convierten en
+toma de decisiones.
 
 **Excluir no borra.** Una sesión excluida (una prueba interna, un duplicado) sigue en
 `uploads/`, pero deja de contar en el resumen, en los escenarios y en las descargas.
@@ -104,12 +124,14 @@ Todas llevan `file`, `pin`, `deviceId`, `sessionId` y `difficulty`. `file` es la
 
 | Tabla | Una fila por… |
 |---|---|
-| `analisis` | sesión y escenario, con las métricas del estudio (G, tiempo validado, N, F, K, primer acierto, cambios del plan) y por qué se excluye lo excluido. **La tabla para el estudio** |
+| `analisis` | sesión y escenario, con las métricas del estudio (G, tiempo validado, N, F, K, primer acierto, cambios del plan, perfil de pilares) y por qué se excluye lo excluido. **La tabla para el estudio** |
+| `pilares` | sesión, escenario y dimensión valorados en la ficha: C1, C2, C, E, P y evidencias (sección 7.7) |
 | `sesiones` | sesión, con el resumen de los cuatro escenarios en columnas `e1_`…`e4_` y la ficha |
 | `escenarios` | sesión y escenario (lo mismo, en formato largo) |
-| `intentos` | pulsación de ejecutar en los escenarios 1 y 3 |
+| `intentos` | pulsación de ejecutar en los escenarios 1 y 3, con `solutionPercent` y, en el 3, `remaining` |
 | `bloques` | bloque de cada secuencia, para analizar el orden |
 | `selecciones` | opción pulsada en el escenario 2, incluidas las que se quitan |
+| `pruebas` | pulsación de Probar en el escenario 2, con lo marcado (desde el 22/10/2026) |
 | `colocaciones` | ficha encajada en un hueco en el escenario 4 |
 | `eventos` | evento de la sesión, de cualquier escenario, en orden cronológico |
 | `avisos` | aviso de integridad |

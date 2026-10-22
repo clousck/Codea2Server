@@ -8,8 +8,9 @@ cruzarlos con la documentación de variables del proyecto. Las banderas van toda
 from dataclasses import dataclass
 from datetime import datetime
 
-from . import sheet as ficha
-from .model import SCENARIOS, ZONE, as_flag, as_float, as_int, is_selected, parse_utc, seconds_between
+from .model import (SCENARIOS, ZONE, as_flag, as_float, as_int, is_selected, parse_utc, remaining,
+                    seconds_between, solution_percent)
+from .solutions import compare
 
 SEQUENCE_SEPARATOR = " > "
 
@@ -52,7 +53,8 @@ KEYS = (
 )
 
 COUNTER_DOCS = {
-    "failedAttempts": "intentos fallidos que registró el juego",
+    "failedAttempts": "intentos fallidos que registró el juego. En el escenario 2, pruebas (Probar) sin "
+                      "resolver, desde el 22/10/2026",
     "blocksGrabbed": "veces que agarró un bloque",
     "blocksConnected": "veces que encajó un bloque en un hueco",
     "blockResets": "veces que pulsó el reinicio de bloques",
@@ -87,7 +89,10 @@ COUNTER_LABELS = {
 
 _SCENARIO_BASE = ("started", "completed", "timedOut", "totalSeconds", "startedUtc", "endedUtc")
 _RUN_KNOWN = ("pin", "deviceId", "sessionId", "difficulty", "startedUtc", "endedUtc", "totalSeconds")
-_ATTEMPT_KNOWN = ("difficulty", "sequence", "repetitions", "itemType", "solved", "durationSeconds", "timestamp")
+_ATTEMPT_KNOWN = ("difficulty", "sequence", "repetitions", "itemType", "remaining", "solved", "solutionPercent",
+                  "durationSeconds", "timestamp")
+_TRY_KNOWN = ("module", "selection", "correctSelected", "wrongSelected", "solved", "solutionPercent",
+              "durationSeconds", "timestamp")
 _SELECTION_KNOWN = ("module", "option", "selected", "correct", "durationSeconds", "timestamp")
 _PLACEMENT_KNOWN = ("socket", "chip", "correct", "durationSeconds", "timestamp")
 
@@ -164,6 +169,9 @@ def _session_columns():
             Column(prefix + "totalSeconds", "float", f"{label}: segundos que duró, según el juego"),
             Column(prefix + meta.events_key, "int", f"{label}: número de {meta.events_label.lower()}"),
         ]
+        if meta.tries_key:
+            columns.append(Column(prefix + "tries", "int", f"{label}: número de pruebas (Probar). Vacío en los "
+                                                           "JSON anteriores al 22/10/2026"))
         columns += [Column(prefix + c, "int", f"{label}: {COUNTER_DOCS[c]}") for c in meta.counters]
         if meta.events_key == "attempts":
             columns.append(Column(prefix + "thinkSeconds", "float",
@@ -182,13 +190,8 @@ _SESSION_TAIL = (
     Column("moment", "text", "Ficha · Momento de evaluación: inicial o final"),
     Column("help", "text", "Ficha · Ayuda recibida: ninguna, verbal o directa"),
     Column("closure", "text", "Ficha · Motivo de cierre: completada, tiempo, abandono o tecnica"),
+    Column("observer", "text", "Ficha · Quién observó la sesión"),
     Column("gameVersion", "text", "Ficha · Versión del juego"),
-    *(Column(ficha.criterion(key, number), "text",
-             f"Ficha · {name}, criterio {number}: 1 se cumple, 0 no se cumple, NO sin evidencia")
-      for key, (name, _, _) in ficha.PILLARS.items() for number in (1, 2)),
-    *(Column(f"p_{key}_pct", "int",
-             f"Ficha · {name}: 0, 50 o 100 si se observaron los dos criterios. No es un porcentaje de dominio")
-      for key, (name, _, _) in ficha.PILLARS.items()),
     Column("uploadedLocal", "local", "Fecha del archivo en el servidor (última subida), en hora local"),
 )
 
@@ -220,6 +223,8 @@ def sessions_table(runs):
                 continue
             row[prefix + "totalSeconds"] = scenario.total_seconds
             row[prefix + meta.events_key] = len(scenario.events)
+            if scenario.has_tries:
+                row[prefix + "tries"] = len(scenario.tries)
             for counter in meta.counters:
                 row[prefix + counter] = scenario.counter(counter)
             if meta.events_key == "attempts":
@@ -232,10 +237,8 @@ def sessions_table(runs):
             "issues": len(run.issues),
             "excluded": run.excluded,
             "note": run.note,
-            **{key: run.sheet.get(key, "") for key in ("participant", "moment", "help", "closure", "gameVersion")},
-            **{ficha.criterion(key, number): run.sheet.get(ficha.criterion(key, number), "")
-               for key in ficha.PILLARS for number in (1, 2)},
-            **{f"p_{key}_pct": ficha.pillar_score(run.sheet, key) for key in ficha.PILLARS},
+            **{key: run.sheet.get(key, "") for key in ("participant", "moment", "help", "closure", "observer",
+                                                       "gameVersion")},
             "uploadedLocal": _local(datetime.fromtimestamp(run.file.mtime, ZONE)),
         })
         rows.append(row)
@@ -252,7 +255,7 @@ def scenarios_table(runs):
     for meta in SCENARIOS.values():
         counters += [c for c in meta.counters if c not in counters]
     records = [s.raw for r in runs for s in r.scenarios.values() if s.present]
-    event_keys = {m.events_key for m in SCENARIOS.values()}
+    event_keys = {m.events_key for m in SCENARIOS.values()} | {m.tries_key for m in SCENARIOS.values()}
     extras = _extra_columns(records, {*_SCENARIO_BASE, *counters, *event_keys})
 
     columns = (
@@ -269,6 +272,8 @@ def scenarios_table(runs):
         Column("clockSeconds", "float", "Segundos de reloj entre startedUtc y endedUtc. "
                                         "Si supera a totalSeconds, el visor estuvo en pausa"),
         Column("eventCount", "int", "Intentos, selecciones o colocaciones registrados, según el escenario"),
+        Column("tryCount", "int", "Pruebas (Probar) del escenario 2. Vacío en los demás y en los JSON anteriores "
+                                  "al 22/10/2026"),
         *(Column(c, "int", COUNTER_DOCS[c][0].upper() + COUNTER_DOCS[c][1:] + ". Vacío donde no aplica")
           for c in counters),
         *extras,
@@ -291,6 +296,7 @@ def scenarios_table(runs):
                     "endedUtc": scenario.raw.get("endedUtc"),
                     "clockSeconds": scenario.clock_seconds,
                     "eventCount": len(scenario.events),
+                    "tryCount": len(scenario.tries) if scenario.has_tries else None,
                 })
                 for counter in scenario.meta.counters:
                     row[counter] = scenario.counter(counter)
@@ -312,6 +318,12 @@ def _scenario_events(runs, events_key):
                     yield run, scenario, index, event
 
 
+def loop_slack(event):
+    """repetitions - remaining de una ejecución del escenario 3, o None si falta alguno."""
+    repetitions, left = as_int(event.get("repetitions")), remaining(event)
+    return repetitions - left if repetitions is not None and left is not None else None
+
+
 def attempts_table(runs):
     found = list(_scenario_events(runs, "attempts"))
     extras = _extra_columns([e for _, _, _, e in found], _ATTEMPT_KNOWN)
@@ -326,8 +338,23 @@ def attempts_table(runs):
         Column("sequenceLength", "int", "Número de bloques de la secuencia"),
         Column("repetitions", "int", "Repeticiones del bucle. Solo en el escenario 3"),
         Column("itemType", "text", "Ficha de tipo puesta (Barril o Caja). Solo en el escenario 3"),
+        Column("remaining", "int", "Objetos de ese tipo que quedaban por trasladar al ejecutar. Solo en el "
+                                   "escenario 3, desde el 22/10/2026. Vacío si el juego anotó -1"),
+        Column("loopSlack", "int", "repetitions - remaining: 0 es el bucle ajustado a lo que quedaba; positivo, "
+                                   "repeticiones de más; negativo, de menos"),
         Column("solved", "flag", "1 si este intento completó el escenario. En el escenario 3 hacen falta "
                                  "varias pasadas, y solo la última lleva un 1"),
+        Column("solutionPercent", "float", "Parecido de la secuencia con la solución (0 a 100): subsecuencia común "
+                                           "más larga entre la más larga de las dos. Desde el 22/10/2026; vacío si "
+                                           "el juego anotó -1. En el escenario 3 básico vale siempre 100"),
+        Column("solutionLength", "int", "E1 · Instrucciones de la solución más cercana (clave del panel)"),
+        Column("missing", "int", "E1 · Instrucciones de la solución que faltan, sin mirar el orden"),
+        Column("extra", "int", "E1 · Instrucciones que sobran respecto a la solución, sin mirar el orden"),
+        Column("inOrder", "int", "E1 · Instrucciones en el orden de la solución (subsecuencia común más larga)"),
+        Column("orderPct", "float", "E1 · inOrder entre las instrucciones que coinciden, × 100. Vacío si no "
+                                    "coincide ninguna"),
+        Column("keyPercent", "float", "E1 · La cuenta de solutionPercent hecha con la clave del panel. Sirve "
+                                      "para los JSON anteriores al 22/10/2026 y para comprobar la clave"),
         Column("durationSeconds", "float", "Segundos pensando antes de ejecutar. No incluye la ejecución"),
         Column("timestamp", "utc", "Momento en que pulsó ejecutar (UTC)"),
         Column("secondsFromScenarioStart", "float", "Segundos desde el inicio del escenario"),
@@ -346,11 +373,18 @@ def attempts_table(runs):
             "sequenceLength": len(blocks),
             "repetitions": as_int(event.get("repetitions")),
             "itemType": event.get("itemType"),
+            "remaining": remaining(event),
+            "loopSlack": loop_slack(event),
             "solved": as_flag(event.get("solved")),
+            "solutionPercent": solution_percent(event),
             "durationSeconds": as_float(event.get("durationSeconds")),
             "timestamp": event.get("timestamp"),
             "secondsFromScenarioStart": scenario.offset(event),
         })
+        key = compare(event.get("sequence"), run.difficulty) if scenario.number == 1 else None
+        if key:
+            row.update({name: key[name] for name in ("solutionLength", "missing", "extra", "inOrder", "orderPct")},
+                       keyPercent=key["percent"])
         rows.append(_with_extras(row, event, extras))
     return Table(
         "intentos", "Intentos",
@@ -415,6 +449,49 @@ def selections_table(runs):
         columns, tuple(rows))
 
 
+def tries_table(runs):
+    found = [(run, scenario, index, event)
+             for run in runs for scenario in run.scenarios.values()
+             for index, event in enumerate(scenario.tries, start=1)]
+    extras = _extra_columns([e for _, _, _, e in found], _TRY_KNOWN)
+    columns = (
+        *KEYS,
+        Column("try", "int", "Número de prueba dentro del escenario 2, desde 1"),
+        Column("module", "text", "Módulo que se probó: motores, generadores o enfriamiento"),
+        Column("selection", "text", f"Opciones marcadas al pulsar Probar, separadas por '{SEQUENCE_SEPARATOR.strip()}'"),
+        Column("correctSelected", "int", "Opciones correctas entre las marcadas"),
+        Column("wrongSelected", "int", "Opciones incorrectas entre las marcadas"),
+        Column("solved", "flag", "1 si la prueba reparó el módulo"),
+        Column("solutionPercent", "float", "Acertadas entre la unión de marcadas y correctas (0 a 100). Vacío si "
+                                           "el juego anotó -1"),
+        Column("durationSeconds", "float", "Segundos desde la prueba anterior (o desde el inicio del escenario)"),
+        Column("timestamp", "utc", "Momento en que pulsó Probar (UTC)"),
+        Column("secondsFromScenarioStart", "float", "Segundos desde el inicio del escenario"),
+        *extras,
+    )
+    rows = []
+    for run, scenario, index, event in found:
+        picked = event.get("selection")
+        row = _keys(run)
+        row.update({
+            "try": index,
+            "module": event.get("module"),
+            "selection": SEQUENCE_SEPARATOR.join(str(o) for o in picked) if isinstance(picked, list) else None,
+            "correctSelected": as_int(event.get("correctSelected")),
+            "wrongSelected": as_int(event.get("wrongSelected")),
+            "solved": as_flag(event.get("solved")),
+            "solutionPercent": solution_percent(event),
+            "durationSeconds": as_float(event.get("durationSeconds")),
+            "timestamp": event.get("timestamp"),
+            "secondsFromScenarioStart": scenario.offset(event),
+        })
+        rows.append(_with_extras(row, event, extras))
+    return Table(
+        "pruebas", "Pruebas",
+        "Una fila por cada vez que pulsó Probar en el escenario 2 (desde el 22/10/2026), con lo que tenía marcado.",
+        columns, tuple(rows))
+
+
 def placements_table(runs):
     found = list(_scenario_events(runs, "placements"))
     extras = _extra_columns([e for _, _, _, e in found], _PLACEMENT_KNOWN)
@@ -461,6 +538,12 @@ def _describe_attempt(event):
     return detail
 
 
+def describe_try(event):
+    picked = event.get("selection")
+    picked = " + ".join(str(o) for o in picked) if isinstance(picked, list) and picked else "(nada marcado)"
+    return f"{event.get('module')}: {picked}"
+
+
 def run_events(run):
     """Todo lo que pasó en la sesión, en orden cronológico."""
     events = []
@@ -485,6 +568,8 @@ def run_events(run):
             else:
                 add(stamp, number, "colocacion", f"{event.get('chip')} → {event.get('socket')}",
                     as_flag(event.get("correct")))
+        for event in scenario.tries:
+            add(event.get("timestamp"), number, "prueba", describe_try(event), as_flag(event.get("solved")))
         if scenario.ended_at:
             add(scenario.raw.get("endedUtc"), number, "fin_escenario", scenario.meta.name, scenario.completed)
     if run.ended_at:
@@ -501,9 +586,10 @@ def events_table(runs):
         Column("timestamp", "utc", "Momento del evento (UTC)"),
         Column("secondsFromSessionStart", "float", "Segundos desde el inicio de la sesión"),
         Column("scenario", "int", "Escenario del evento. Vacío en el inicio y el fin de la sesión"),
-        Column("event", "text", "inicio_sesion, inicio_escenario, intento, seleccion, deseleccion, "
+        Column("event", "text", "inicio_sesion, inicio_escenario, intento, seleccion, deseleccion, prueba, "
                                 "colocacion, fin_escenario o fin_sesion"),
-        Column("detail", "text", "Secuencia del intento, módulo y opción, o ficha → hueco"),
+        Column("detail", "text", "Secuencia del intento, módulo y opción, módulo y lo marcado al probar, "
+                                 "o ficha → hueco"),
         Column("result", "flag", "1 si resolvió, era correcta o completó el escenario. Vacío donde no aplica"),
     )
     rows = []
@@ -563,12 +649,12 @@ def dictionary_table(tables):
 
 
 BUILDERS = (sessions_table, scenarios_table, attempts_table, blocks_table,
-            selections_table, placements_table, events_table, issues_table)
+            selections_table, tries_table, placements_table, events_table, issues_table)
 
 
 def build_tables(runs):
     """Todas las tablas del recorte, con el diccionario al final."""
-    from .metrics import analysis_table  # metrics depende de este módulo
+    from .metrics import analysis_table, pillars_table  # metrics depende de este módulo
 
-    tables = [analysis_table(runs), *(build(runs) for build in BUILDERS)]
+    tables = [analysis_table(runs), pillars_table(runs), *(build(runs) for build in BUILDERS)]
     return [*tables, dictionary_table(tables)]

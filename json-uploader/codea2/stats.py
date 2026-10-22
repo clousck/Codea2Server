@@ -4,8 +4,10 @@ import math
 import statistics
 from collections import Counter, defaultdict
 
-from .model import DIFFICULTIES, SCENARIOS, as_flag, as_int, is_selected, parse_utc, seconds_between
-from .tables import COUNTER_DOCS, COUNTER_LABELS, run_events
+from .model import (DIFFICULTIES, SCENARIOS, as_flag, as_int, is_selected, parse_utc, remaining,
+                    seconds_between, solution_percent)
+from .solutions import compare
+from .tables import COUNTER_DOCS, COUNTER_LABELS, loop_slack, run_events
 
 _TIME_STEPS = (5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200)
 _HEAT_LEVELS = 6
@@ -209,6 +211,11 @@ def _counters(meta, scenarios):
     """Descriptivos de cada contador del escenario entre las sesiones que lo iniciaron."""
     rows = [{"key": meta.events_key, "label": meta.events_label, "doc": f"Número de {meta.events_label.lower()}",
              "stats": describe(len(s.events) for s in scenarios)}]
+    if meta.tries_key:
+        stats = describe(len(s.tries) for s in scenarios if s.has_tries)
+        if stats["n"]:
+            rows.append({"key": meta.tries_key, "label": meta.tries_label,
+                         "doc": "Veces que pulsó Probar (desde el 22/10/2026)", "stats": stats})
     for key in meta.counters:
         stats = describe(s.counter(key) for s in scenarios)
         # Un contador que ninguna sesión del recorte trae es de otro formato: no se enseña
@@ -228,7 +235,7 @@ def _histogram(values, cap):
 
 def _sequences(runs, number, limit=12):
     """Las secuencias que más se ejecutaron, con cuántas sesiones las probaron."""
-    seen = defaultdict(lambda: {"count": 0, "runs": set(), "solved": 0})
+    seen = defaultdict(lambda: {"count": 0, "runs": set(), "solved": 0, "percent": []})
     for run in runs:
         for event in run.scenarios[number].events:
             blocks = event.get("sequence")
@@ -237,13 +244,32 @@ def _sequences(runs, number, limit=12):
             entry["count"] += 1
             entry["runs"].add(run.id)
             entry["solved"] += as_flag(event.get("solved"))
+            entry["percent"].append(solution_percent(event))
     ranked = sorted(seen.items(), key=lambda item: (-item[1]["count"], item[0]))
     return {
-        "rows": [{"blocks": blocks, "count": e["count"], "sessions": len(e["runs"]), "solved": e["solved"]}
+        "rows": [{"blocks": blocks, "count": e["count"], "sessions": len(e["runs"]), "solved": e["solved"],
+                  "percent": describe(e["percent"])["median"]}
                  for blocks, e in ranked[:limit]],
         "distinct": len(ranked),
         "hidden": max(len(ranked) - limit, 0),
     }
+
+
+def _closeness(scenarios, cap=6):
+    """solutionPercent según el número de intento: 1.º, 2.º, ... cap+. Sin datos, None.
+
+    Muestra si las sesiones se acercan a la solución intento a intento. El -1 no entra.
+    """
+    positions = defaultdict(list)
+    solved = Counter()
+    for scenario in scenarios:
+        for index, event in enumerate(scenario.events, start=1):
+            positions[min(index, cap)].append(solution_percent(event))
+            solved[min(index, cap)] += as_flag(event.get("solved"))
+    rows = [{"label": f"{i}+" if i == cap else f"{i}.º", "stats": describe(positions[i]),
+             "attempts": len(positions[i]), "solved": solved[i]}
+            for i in range(1, cap + 1) if positions[i]]
+    return rows if any(r["stats"]["n"] for r in rows) else None
 
 
 def _section(runs, number):
@@ -267,6 +293,7 @@ def scenario_1(runs):
     section, started, completed = _section(runs, 1)
     section["attempts"] = _histogram([len(s.events) for s in completed if s.events], cap=6)
     section["sequences"] = _sequences(runs, 1)
+    section["closeness"] = _closeness(started)
     return section
 
 
@@ -274,7 +301,8 @@ def scenario_2(runs):
     section, started, _ = _section(runs, 2)
     picks = Counter()
     correct = set()
-    modules = defaultdict(lambda: {"sessions": 0, "selections": 0, "wrong": 0, "removed": 0, "clean": 0})
+    modules = defaultdict(lambda: {"sessions": 0, "selections": 0, "wrong": 0, "removed": 0, "clean": 0,
+                                   "tries": 0, "failed": 0, "tried": 0, "first_try": 0})
     for scenario in started:
         wrong_by_module = Counter()
         touched = set()
@@ -294,10 +322,20 @@ def scenario_2(runs):
         for module in touched:
             modules[module]["sessions"] += 1
             modules[module]["clean"] += not wrong_by_module[module]
+        first = {}
+        for event in scenario.tries:
+            module, ok = str(event.get("module")), as_flag(event.get("solved"))
+            modules[module]["tries"] += 1
+            modules[module]["failed"] += not ok
+            first.setdefault(module, ok)
+        for module, ok in first.items():
+            modules[module]["tried"] += 1
+            modules[module]["first_try"] += ok
 
     module_names = sorted(modules)
     options = sorted({option for _, option in picks}, key=lambda o: (-sum(picks[(m, o)] for m in module_names), o))
     section["modules"] = [{"name": name, **modules[name]} for name in module_names]
+    section["with_tries"] = sum(1 for s in started if s.has_tries)
     # Las opciones van en filas: son frases largas, y los módulos caben de sobra en columnas
     section["picks"] = _heat(options, module_names,
                              {(option, module): count for (module, option), count in picks.items()},
@@ -318,6 +356,16 @@ def scenario_3(runs):
     section["repetitions"] = _heat(types, list(range(0, most + 1)), grid)
     section["attempts"] = _histogram([len(s.events) for s in completed if s.events], cap=6)
     section["sequences"] = _sequences(runs, 3)
+    section["closeness"] = _closeness(started)
+    slack = Counter()
+    for scenario in started:
+        for event in scenario.events:
+            value = loop_slack(event)
+            if value is not None:
+                slack["exacto" if value == 0 else "de más" if value > 0 else "de menos"] += 1
+    total = sum(slack.values())
+    section["slack"] = [{"label": label, "count": slack[label], "ratio": _ratio(slack[label], total)}
+                        for label in ("exacto", "de más", "de menos")] if total else None
     return section
 
 
@@ -354,7 +402,7 @@ def scenario_sections(runs):
 # ── Detalle de una sesión ─────────────────────────────────────────────────────
 
 _EVENT_LABELS = {"intento": "Intento", "seleccion": "Selección", "deseleccion": "Deselección",
-                 "colocacion": "Colocación"}
+                 "prueba": "Prueba", "colocacion": "Colocación"}
 
 
 def _mark_state(event):
@@ -422,5 +470,25 @@ def scenario_detail(scenario):
             "selected": is_selected(event),
             "correct": as_flag(event.get("correct")),
             "repetitions": as_int(event.get("repetitions")),
+            "remaining": remaining(event),
+            "percent": solution_percent(event),
+            "key": compare(event.get("sequence"), scenario.difficulty) if scenario.number == 1 else None,
+        })
+    return rows
+
+
+def tries_detail(scenario):
+    """Las pruebas (Probar) del escenario 2, listas para pintar."""
+    rows = []
+    for index, event in enumerate(scenario.tries, start=1):
+        options = event.get("selection")
+        rows.append({
+            "index": index,
+            "at": parse_utc(event.get("timestamp")),
+            "offset": scenario.offset(event),
+            "event": event,
+            "options": [str(o) for o in options] if isinstance(options, list) else [],
+            "solved": as_flag(event.get("solved")),
+            "percent": solution_percent(event),
         })
     return rows

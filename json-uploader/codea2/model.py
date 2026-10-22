@@ -41,6 +41,8 @@ class ScenarioMeta:
     counters: tuple  # contadores del registro, en el orden del JSON
     error_key: str  # el contador que mejor resume los errores del escenario
     error_label: str
+    tries_key: str = ""  # segunda lista: los Probar del escenario 2 (desde el 22/10/2026)
+    tries_label: str = ""
 
     @property
     def key(self):
@@ -63,8 +65,8 @@ SCENARIOS = {
                     ("failedAttempts", "blocksGrabbed", "blocksConnected", "blockResets",
                      "errorCollisionBot", "errorInvalidUse", *_LEGACY, "errorInvalidCommand"),
                     "failedAttempts", "intentos fallidos"),
-    2: ScenarioMeta(2, "Condicionales", "selections", "Selecciones", ("wrongSelections",),
-                    "wrongSelections", "selecciones incorrectas"),
+    2: ScenarioMeta(2, "Condicionales", "selections", "Selecciones", ("failedAttempts", "wrongSelections"),
+                    "wrongSelections", "selecciones incorrectas", "attempts", "Pruebas"),
     3: ScenarioMeta(3, "Bucles", "attempts", "Ejecuciones",
                     ("failedAttempts", "blocksGrabbed", "blocksConnected", "errorInvalidCommand",
                      *_LEGACY, "errorCollisionBot"),
@@ -111,6 +113,21 @@ def as_flag(value):
 def is_selected(event):
     """Si la pulsación marcó la opción. Desde el 06/10/2026 solo se registran las que marcan."""
     return as_flag(event.get("selected", True))
+
+
+def solution_percent(event):
+    """solutionPercent de un intento (0 a 100), o None.
+
+    Llega el 22/10/2026. -1 significa que el juego no tenía la solución cargada: no es un cero.
+    """
+    value = as_float(event.get("solutionPercent"))
+    return value if value is not None and 0 <= value <= 100 else None
+
+
+def remaining(event):
+    """remaining de una ejecución del escenario 3, o None si no viene o vale -1."""
+    value = as_int(event.get("remaining"))
+    return value if value is not None and value >= 0 else None
 
 
 def as_int(value):
@@ -161,6 +178,8 @@ class Scenario:
     ended_at: datetime | None
     events: tuple
     timed_out: bool = False  # la sala agotó sus 5 minutos y la historia siguió (desde el 12/10/2026)
+    tries: tuple = ()  # los Probar del escenario 2; vacío en los demás y en los JSON anteriores al 22/10/2026
+    difficulty: int | None = None  # la de la sesión: hace falta para comparar con la clave de soluciones
 
     @property
     def number(self):
@@ -178,6 +197,11 @@ class Scenario:
             if key == "wrongPlacements":
                 return sum(1 for e in self.events if not as_flag(e.get("correct")))
         return as_int(self.raw.get(key))
+
+    @property
+    def has_tries(self):
+        """Si el JSON trae la lista de pruebas: los anteriores al 22/10/2026 no la tienen."""
+        return bool(self.meta.tries_key) and isinstance(self.raw.get(self.meta.tries_key), list)
 
     @property
     def errors(self):
@@ -273,6 +297,7 @@ def build_run(file):
         present = isinstance(raw, dict)
         raw = raw if present else {}
         events = raw.get(meta.events_key)
+        tries = raw.get(meta.tries_key) if meta.tries_key else None
         scenarios[meta.number] = Scenario(
             meta=meta,
             raw=raw,
@@ -284,6 +309,8 @@ def build_run(file):
             ended_at=parse_utc(raw.get("endedUtc")),
             events=tuple(e for e in events if isinstance(e, dict)) if isinstance(events, list) else (),
             timed_out=as_flag(raw.get("timedOut")),
+            tries=tuple(e for e in tries if isinstance(e, dict)) if isinstance(tries, list) else (),
+            difficulty=as_int(data.get("difficulty")),
         )
     pin = data.get("pin")
     return Run(

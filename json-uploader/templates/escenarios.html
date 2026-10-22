@@ -75,7 +75,7 @@
     {% if section.sequences.rows %}
     <table class="data">
       <thead>
-        <tr><th>Secuencia</th><th class="n">Bloques</th><th class="n">Veces</th><th class="n">Sesiones</th><th class="n" title="Veces que esta secuencia fue la que completó el escenario">Completó</th></tr>
+        <tr><th>Secuencia</th><th class="n">Bloques</th><th class="n">Veces</th><th class="n">Sesiones</th><th class="n" title="Veces que esta secuencia fue la que completó el escenario">Completó</th><th class="n" title="solutionPercent mediano: parecido con la solución en número y orden de instrucciones">Cercanía</th></tr>
       </thead>
       <tbody>
         {% for row in section.sequences.rows %}
@@ -85,15 +85,46 @@
           <td class="n">{{ row.count }}</td>
           <td class="n">{{ row.sessions }}</td>
           <td class="n">{{ row.solved }}</td>
+          <td class="n">{{ (row.percent|num(0) ~ ' %') if row.percent is not none else '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
       {% if section.sequences.hidden %}
-      <tfoot><tr><td colspan="5">Y {{ section.sequences.hidden }} más. Están todas en la tabla <a href="{{ url_for('datos', **filters.query()) }}#intentos">intentos</a>.</td></tr></tfoot>
+      <tfoot><tr><td colspan="6">Y {{ section.sequences.hidden }} más. Están todas en la tabla <a href="{{ url_for('datos', **filters.query()) }}#intentos">intentos</a>.</td></tr></tfoot>
       {% endif %}
     </table>
     {% else %}
     <div class="empty">Sin intentos en este recorte.</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro closeness(section, word, plural) %}
+<div class="card">
+  <h3>Cercanía a la solución, {{ word }} a {{ word }}</h3>
+  <p class="sub">solutionPercent del 1.º, 2.º, 3.º… {{ word }} de cada sesión: cuánto se parece la secuencia a la solución en número y orden de instrucciones. Los {{ plural }} en los que el juego anotó -1 no entran.</p>
+  <div class="card-body table-wrap">
+    {% if section.closeness %}
+    <table class="data compact">
+      <thead>
+        <tr><th>{{ word|capitalize }}</th><th class="n">{{ plural|capitalize }}</th><th class="n">Mediana</th><th class="n">Mín</th><th class="n">Máx</th><th class="n" title="Cuántos de esos {{ plural }} completaron el escenario">Resolvieron</th></tr>
+      </thead>
+      <tbody>
+        {% for row in section.closeness %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td class="n">{{ row.attempts }}</td>
+          <td class="n">{{ (row.stats.median|num(0) ~ ' %') if row.stats.n else '—' }}</td>
+          <td class="n">{{ (row.stats.min|num(0) ~ ' %') if row.stats.n else '—' }}</td>
+          <td class="n">{{ (row.stats.max|num(0) ~ ' %') if row.stats.n else '—' }}</td>
+          <td class="n">{{ row.solved }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">Sin solutionPercent en este recorte: llega con los JSON del 22/10/2026.</div>
     {% endif %}
   </div>
 </div>
@@ -128,7 +159,10 @@
   {{ attempts(e1, 'intentos') }}
   {{ counters(e1) }}
 </div>
-<div style="margin-top: 16px">{{ sequences(e1) }}</div>
+<div class="grid two" style="margin-top: 16px">
+  {{ closeness(e1, 'intento', 'intentos') }}
+  {{ sequences(e1) }}
+</div>
 
 {# ── Escenario 2 ── #}
 {{ head(e2) }}
@@ -147,11 +181,12 @@
   </figure>
   <div class="card">
     <h3>Por módulo</h3>
-    <p class="sub">Una sesión «sin error» no marcó ninguna opción incorrecta en ese módulo.</p>
+    <p class="sub">Una sesión «sin error» no marcó ninguna opción incorrecta en ese módulo. Las pruebas son cada Probar; «a la primera» cuenta las sesiones cuya primera prueba ya reparó el módulo{% if e2.with_tries < e2.started %} ({{ e2.with_tries }} de {{ e2.started }} sesiones traen pruebas: llegan con los JSON del 22/10/2026){% endif %}.</p>
+    {% set removed = e2.modules|sum(attribute='removed') %}
     <div class="card-body table-wrap">
       <table class="data compact">
         <thead>
-          <tr><th>Módulo</th><th class="n">Sesiones</th><th class="n">Selecciones</th><th class="n">Incorrectas</th><th class="n">Quitadas</th><th class="n">Sin error</th></tr>
+          <tr><th>Módulo</th><th class="n">Sesiones</th><th class="n">Selecciones</th><th class="n">Incorrectas</th>{% if removed %}<th class="n" title="Solo en los JSON anteriores al 06/10/2026">Quitadas</th>{% endif %}<th class="n">Sin error</th><th class="n">Pruebas</th><th class="n">Fallidas</th><th class="n">A la primera</th></tr>
         </thead>
         <tbody>
           {% for module in e2.modules %}
@@ -160,11 +195,14 @@
             <td class="n">{{ module.sessions }}</td>
             <td class="n">{{ module.selections }}</td>
             <td class="n">{{ module.wrong }}</td>
-            <td class="n">{{ module.removed }}</td>
+            {% if removed %}<td class="n">{{ module.removed }}</td>{% endif %}
             <td class="n">{{ module.clean }} <span class="sub">({{ (module.clean / module.sessions)|pct if module.sessions else '—' }})</span></td>
+            <td class="n">{{ module.tries if e2.with_tries else '—' }}</td>
+            <td class="n">{{ module.failed if e2.with_tries else '—' }}</td>
+            <td class="n">{% if module.tried %}{{ module.first_try }} <span class="sub">({{ (module.first_try / module.tried)|pct }})</span>{% else %}—{% endif %}</td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="empty">Sin selecciones en este recorte.</td></tr>
+          <tr><td colspan="9" class="empty">Sin selecciones en este recorte.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -189,6 +227,27 @@
     </div>
   </figure>
   {{ attempts(e3, 'ejecuciones') }}
+</div>
+<div class="grid two" style="margin-top: 16px">
+  {{ closeness(e3, 'ejecución', 'ejecuciones') }}
+  <div class="card">
+    <h3>Ajuste del bucle</h3>
+    <p class="sub">repetitions − remaining en cada ejecución: «exacto» es el bucle ajustado a los objetos que quedaban de ese tipo.</p>
+    <div class="card-body table-wrap">
+      {% if e3.slack %}
+      <table class="data compact">
+        <thead><tr><th>Repeticiones</th><th class="n">Ejecuciones</th><th class="n">Proporción</th></tr></thead>
+        <tbody>
+          {% for row in e3.slack %}
+          <tr><td>{{ row.label|capitalize }}</td><td class="n">{{ row.count }}</td><td class="n">{{ row.ratio|pct }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Sin remaining en este recorte: llega con los JSON del 22/10/2026.</div>
+      {% endif %}
+    </div>
+  </div>
 </div>
 <div class="grid two" style="margin-top: 16px">
   {{ counters(e3) }}

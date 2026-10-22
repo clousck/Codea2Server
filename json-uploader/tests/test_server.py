@@ -297,8 +297,8 @@ class TablesTest(ServerCase):
 
     def test_workbook_keeps_types(self):
         book = load_workbook(io.BytesIO(self.client.get("/exportar/todo.xlsx").data))
-        self.assertEqual(book.sheetnames, ["analisis", "sesiones", "escenarios", "intentos", "bloques", "selecciones",
-                                           "colocaciones", "eventos", "avisos", "diccionario"])
+        self.assertEqual(book.sheetnames, ["analisis", "pilares", "sesiones", "escenarios", "intentos", "bloques",
+                                           "selecciones", "pruebas", "colocaciones", "eventos", "avisos", "diccionario"])
         sheet = book["sesiones"]
         row = dict(zip([c.value for c in sheet[1]], sheet[2]))
         self.assertEqual((row["pin"].value, row["pin"].data_type), ("0101", "s"))
@@ -393,7 +393,7 @@ class CurrentFormatTest(ServerCase):
 
 
 class MetricsTest(ServerCase):
-    """Las métricas del documento del 09/10/2026, con sus propios ejemplos de cálculo."""
+    """Las métricas del documento del 19/10/2026, con sus propios ejemplos de cálculo."""
 
     def setUp(self):
         super().setUp()
@@ -412,7 +412,8 @@ class MetricsTest(ServerCase):
         response = self.client.get("/", headers=BROWSER)
         self.assertEqual((response.status_code, response.headers["Location"]), (302, "/?dif=1"))
         page = self.client.get("/?dif=1", headers=BROWSER).get_data(as_text=True)
-        for code in ("MC1", "MC2", "E1A", "E1B", "E1C", "E2A", "E2B", "E2C", "E3A", "E3B", "E3C", "E4A", "E4B", "E4C"):
+        for code in ("MC1", "MC2", "E1A", "E1B", "E1C", "E1P", "E2A", "E2B", "E2C", "E2P", "E3A", "E3B", "E3C", "E3P",
+                     "E4A", "E4B", "E4C", "E4P"):
             self.assertIn(f">{code}<", page)
 
     def test_each_scenario(self):
@@ -478,15 +479,24 @@ class MetricsTest(ServerCase):
 
     def test_session_sheet(self):
         response = self.post_sheet("0101_5_00000", participant=" P-07 ", moment="final", help="verbal",
-                                   closure="completada", gameVersion="1.4", p_patrones_1="1", p_patrones_2="0",
-                                   p_abstraccion_1="1", p_abstraccion_2="NO", note="tranquilo")
+                                   closure="completada", observer="VE", gameVersion="1.4",
+                                   e2_patrones_1="1", e2_patrones_2="0", e2_decisiones_1="1", e2_decisiones_2="NO",
+                                   e2_decisiones_1_ev="«el agua enfría»", note="tranquilo")
         self.assertEqual(response.status_code, 302)
         row = self.rows("sesiones")[0]
-        self.assertEqual((row["participant"], row["moment"], row["help"], row["closure"], row["gameVersion"], row["note"]),
-                         ("P-07", "final", "verbal", "completada", "1.4", "tranquilo"))
-        # Solo hay porcentaje con los dos criterios observados
-        self.assertEqual((row["p_patrones_pct"], row["p_abstraccion_pct"], row["p_algoritmico_pct"]), ("50", "", ""))
-        self.assertEqual(self.analysis()[("0101_5_00000.json", "1")]["participant"], "P-07")
+        self.assertEqual((row["participant"], row["moment"], row["help"], row["closure"], row["observer"],
+                          row["gameVersion"], row["note"]), ("P-07", "final", "verbal", "completada", "VE", "1.4", "tranquilo"))
+        # E2P: solo hay porcentaje con los dos criterios evaluados; un NO deja NC, no un cero
+        e2 = self.analysis()[("0101_5_00000.json", "2")]
+        self.assertEqual((e2["participant"], e2["RP_C"], e2["RP_E"], e2["RP_P"]), ("P-07", "1", "2", "50"))
+        self.assertEqual((e2["TD_C"], e2["TD_E"], e2["TD_P"], e2["PA_E"]), ("1", "1", "", ""))
+        self.assertEqual(self.analysis()[("0101_5_00000.json", "1")]["RP_P"], "")
+        pillars = {(r["scenario"], r["dimension"]): r for r in self.rows("pilares")}
+        self.assertEqual(set(pillars), {("2", "D"), ("2", "TD"), ("2", "PA"), ("2", "RP")})
+        self.assertEqual((pillars[("2", "TD")]["C1"], pillars[("2", "TD")]["C2"], pillars[("2", "TD")]["evidence1"]),
+                         ("1", "NO", "«el agua enfría»"))
+        self.assertIn("E2P · RP</span>1 de 2 · 50 %",
+                      self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True))
 
         # Tocar otra cosa no borra la ficha, y un valor inventado no se guarda
         self.post_sheet("0101_5_00000", excluded="0", moment="nunca")
@@ -494,6 +504,46 @@ class MetricsTest(ServerCase):
         self.assertEqual((row["participant"], row["moment"]), ("P-07", ""))
         page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
         self.assertIn('value="P-07"', page)
+
+    def test_telemetry_of_22_october(self):
+        # Pruebas del escenario 2, solutionPercent y remaining
+        self.put("0007_42_3F9A1.json", (CURRENT / "0007_42_3F9A1.json").read_bytes())
+        codes = {i.code for i in server.dataset.get("0007_42_3F9A1").issues}
+        self.assertFalse(codes & {"contador", "sin_resuelto", "solucion_parcial"}, codes)
+        rows = self.analysis("?dif=2")
+        e1, e2 = rows[("0007_42_3F9A1.json", "1")], rows[("0007_42_3F9A1.json", "2")]
+        e3 = rows[("0007_42_3F9A1.json", "3")]
+        self.assertEqual((e1["N"], e1["K"], e1["F"], e1["firstSolutionPercent"]), ("3", "3", "2", "18"))
+        # E1S: los dos intentos fallidos quedaron al 18 % y al 91 % de la solución
+        self.assertEqual((e1["failedSolutionPercent"], e1["bestFailedSolutionPercent"], e1["failedSolutionCount"]),
+                         ("54.5", "91", "2"))
+        self.assertIn(">E1S<", self.client.get("/?dif=2", headers=BROWSER).get_data(as_text=True))
+        # E1I: el 1.er intento (Girar Izquierda, Avanzar 2) tiene sus 2 instrucciones en orden y le faltan 9
+        self.assertEqual((e1["firstMissing"], e1["firstExtra"], e1["firstOrderPct"]), ("9", "0", "100"))
+        e1_attempts = [a for a in self.rows("intentos", "?dif=2") if a["scenario"] == "1"]
+        # El 2.º cambia el Avanzar 2 final por un Avanzar: falta uno, sobra otro, 10 de 10 en orden
+        self.assertEqual([(a["missing"], a["extra"], a["inOrder"], a["keyPercent"]) for a in e1_attempts],
+                         [("9", "0", "2", "18.182"), ("1", "1", "10", "90.909"), ("0", "0", "11", "100")])
+        self.assertIn(">E1I<", self.client.get("/?dif=2", headers=BROWSER).get_data(as_text=True))
+        self.assertEqual((e2["N"], e2["F"], e2["tries"], e2["failedTries"]), ("10", "2", "5", "2"))
+        self.assertEqual((e3["K"], e3["firstSolutionPercent"], e3["failedAttempts"]), ("3", "100", "1"))
+        tries = self.rows("pruebas", "?dif=2")
+        self.assertEqual([t["solved"] for t in tries], ["0", "1", "1", "0", "1"])
+        attempts = [a for a in self.rows("intentos", "?dif=2") if a["scenario"] == "3"]
+        self.assertEqual([(a["remaining"], a["loopSlack"]) for a in attempts], [("3", "0"), ("7", "0"), ("7", "0")])
+        self.assertIn("prueba", {e["event"] for e in self.rows("eventos", "?dif=2")})
+        for path in ("/?dif=2", "/escenarios?dif=2", "/sesiones/0007_42_3F9A1"):
+            self.assertEqual(self.status(path), 200, path)
+
+    def test_minus_one_is_not_a_zero(self):
+        data = json.loads((CURRENT / "0007_42_3F9A1.json").read_text(encoding="utf-8-sig"))
+        for attempt in data["escenario1"]["attempts"]:
+            attempt["solutionPercent"] = -1
+        data["escenario3"]["attempts"][0]["remaining"] = -1
+        self.put("0007_42_3F9A1.json", json.dumps(data).encode())
+        self.assertEqual(self.analysis("?dif=2")[("0007_42_3F9A1.json", "1")]["firstSolutionPercent"], "")
+        attempts = [a for a in self.rows("intentos", "?dif=2") if a["scenario"] == "3"]
+        self.assertEqual((attempts[0]["remaining"], attempts[0]["loopSlack"]), ("", ""))
 
 
 if __name__ == "__main__":

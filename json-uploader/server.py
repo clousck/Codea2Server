@@ -229,8 +229,7 @@ def metricas():
     return render_template(
         "metricas.html", **scope,
         summaries=[metrics.scenario_summary(runs, number) for number in SCENARIOS],
-        pillars=metrics.pillar_summary(runs),
-        with_sheet=metrics.with_sheet(runs),
+        sheet=sheet,
         legacy_count=sum(1 for r in scope["matching"] if r.legacy and not r.excluded and r.left_out),
     )
 
@@ -272,6 +271,7 @@ def sesion(run_id):
         following=runs[index + 1] if index + 1 < len(runs) else None,
         timeline=stats.timeline(run),
         details={n: stats.scenario_detail(s) for n, s in run.scenarios.items()},
+        tries={n: stats.tries_detail(s) for n, s in run.scenarios.items()},
         raw=json.dumps(run.raw, ensure_ascii=False, indent=2),
     )
 
@@ -476,6 +476,7 @@ def _template_globals():
         "DIFFICULTIES": DIFFICULTIES,
         "COUNTER_LABELS": tables.COUNTER_LABELS,
         "COUNTER_DOCS": tables.COUNTER_DOCS,
+        "TITLES": metrics.TITLES,
         "zone_name": getattr(ZONE, "key", None) or str(ZONE),
         # El recorte viaja en la URL: las páginas sin recorte propio lo conservan en los enlaces
         "filters": Filters.from_args(request.args),

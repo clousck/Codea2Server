@@ -110,8 +110,20 @@
       {% if m.F is not none %}<li><span>F · incorrectos</span>{{ m.F }}{% if m.PF is not none %} ({{ m.PF|num }} %){% endif %}</li>{% endif %}
       {% if m.M is not none %}<li><span>Primer acierto</span>{{ m.A }} de {{ m.M }}{% if m.P1 is not none %} ({{ m.P1|num }} %){% endif %}</li>{% endif %}
       {% if number == 3 %}<li><span>C · cambios del plan</span>{{ m.C if m.C is not none else 'sin dato' }}</li>{% endif %}
+      {% if m.tries is not none %}<li title="Pruebas (Probar) que no repararon el módulo"><span>Pruebas fallidas</span>{{ m.failedTries }} de {{ m.tries }}</li>{% endif %}
+      {% if m.S1 is not none %}<li title="solutionPercent del primer intento. Contexto, no métrica del documento"><span>{{ 'E1S · ' if number == 1 }}Cercanía del 1.er intento</span>{{ m.S1|num(0) }} %</li>{% endif %}
+      {% if m.I1order is not none %}<li title="E1I · frente a la clave de soluciones"><span>E1I · 1.er intento</span>faltan {{ m.I1missing }} · sobran {{ m.I1extra }} · {{ m.I1order|num(0) }} % en orden</li>{% endif %}
+      {% if m.Smean is not none %}<li title="E1S · media y mejor solutionPercent de los {{ m.Sn }} intentos que no resolvieron"><span>E1S · Intentos fallidos</span>media {{ m.Smean|num(0) }} % · mejor {{ m.Sbest|num(0) }} %</li>{% endif %}
       {% if scenario.started %}<li><span>Tiempo registrado</span>{{ m.recorded|secs }}{% if m.timeWhy %} · fuera de MC2 ({{ m.timeWhy }}){% endif %}</li>{% endif %}
     </ul>
+    {% if sheet.has_profile(run.sheet, number) %}
+    <ul class="pairs measures" title="E{{ number }}P · perfil de evidencias de la ficha">
+      {% for key, (name, short, code, _, _) in sheet.PILLARS.items() %}
+      {% set p = sheet.profile(run.sheet, number, key) %}
+      <li title="{{ name }} ({{ code }}): criterio 1 = {{ p.c1 or 'sin valorar' }}, criterio 2 = {{ p.c2 or 'sin valorar' }}"><span>E{{ number }}P · {{ short }}</span>{{ p.C }} de 2 · {{ (p.P ~ ' %') if p.P is not none else 'NC' }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     <ul class="pairs">
       <li><span>Inicio</span>{{ scenario.started_at|dt('%H:%M:%S') }}</li>
       <li><span>{{ meta.events_label }}</span>{{ rows|length }}</li>
@@ -130,8 +142,10 @@
             <th class="n" title="Segundos desde el inicio del escenario">Desde el inicio</th>
             <th class="n" title="durationSeconds: lo que tardó desde la acción anterior. En los intentos no cuenta la ejecución">Tardó</th>
             {% if meta.events_key == 'attempts' %}
-            {% if number == 3 %}<th class="n">Repeticiones</th><th>Ficha de tipo</th>{% endif %}
+            {% if number == 3 %}<th class="n">Repeticiones</th><th class="n" title="remaining: objetos de ese tipo que quedaban por trasladar">Quedaban</th><th>Ficha de tipo</th>{% endif %}
             <th>Secuencia</th>
+            <th class="n" title="solutionPercent: parecido de la secuencia con la solución, en número y orden de instrucciones">Cercanía</th>
+            {% if number == 1 %}<th class="n" title="E1I · Instrucciones de la solución que faltan y que sobran, sin mirar el orden">Faltan · sobran</th><th class="n" title="E1I · De las instrucciones que coinciden, cuántas están en el orden de la solución">En orden</th>{% endif %}
             {% elif meta.events_key == 'selections' %}
             <th>Módulo</th><th>Opción</th>
             {% else %}
@@ -150,9 +164,15 @@
             {% if meta.events_key == 'attempts' %}
             {% if number == 3 %}
             <td class="n">{{ row.repetitions if row.repetitions is not none else '—' }}</td>
+            <td class="n">{{ row.remaining if row.remaining is not none else '—' }}</td>
             <td>{{ row.event.itemType or '(sin ficha)' }}</td>
             {% endif %}
             <td>{{ ui.blocks(row.blocks) }}</td>
+            <td class="n">{{ (row.percent|num(0) ~ ' %') if row.percent is not none else '—' }}</td>
+            {% if number == 1 %}
+            <td class="n">{% if row.key %}{{ row.key.missing }} · {{ row.key.extra }}{% else %}—{% endif %}</td>
+            <td class="n">{% if row.key and row.key.orderPct is not none %}{{ row.key.inOrder }} de {{ row.key.common }}{% else %}—{% endif %}</td>
+            {% endif %}
             {% elif meta.events_key == 'selections' %}
             <td>{{ row.event.module }}</td>
             <td>{{ row.event.option }}</td>
@@ -168,6 +188,41 @@
     </div>
     {% else %}
     <p class="sub" style="margin-top: 12px">Sin {{ meta.events_label|lower }} registrados.</p>
+    {% endif %}
+
+    {% if tries[number] %}
+    <h3 style="margin-top: 20px">{{ meta.tries_label }}</h3>
+    <p class="sub">Cada vez que pulsó Probar, con lo que tenía marcado en ese módulo.</p>
+    <div class="card-body table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th class="n">#</th><th>Hora</th>
+            <th class="n" title="Segundos desde el inicio del escenario">Desde el inicio</th>
+            <th class="n" title="durationSeconds: lo que tardó desde la prueba anterior">Tardó</th>
+            <th>Módulo</th><th>Marcado al probar</th>
+            <th class="n" title="Correctas e incorrectas entre las marcadas">Bien · mal</th>
+            <th class="n" title="solutionPercent: acertadas entre la unión de marcadas y correctas">Cercanía</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in tries[number] %}
+          <tr>
+            <td class="n">{{ row.index }}</td>
+            <td class="nowrap">{{ row.at|dt('%H:%M:%S') }}</td>
+            <td class="n">{{ row.offset|secs }}</td>
+            <td class="n">{{ row.event.durationSeconds|secs if row.event.durationSeconds is number else '—' }}</td>
+            <td>{{ row.event.module }}</td>
+            <td>{{ ui.blocks(row.options) }}</td>
+            <td class="n">{{ row.event.correctSelected if row.event.correctSelected is number else '—' }} · {{ row.event.wrongSelected if row.event.wrongSelected is number else '—' }}</td>
+            <td class="n">{{ (row.percent|num(0) ~ ' %') if row.percent is not none else '—' }}</td>
+            <td>{% if row.solved %}<span class="status ok">Reparó el módulo</span>{% else %}<span class="status bad">No lo reparó</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% endif %}
     {% elif not scenario.present %}
     <p class="sub" style="margin-top: 8px">El JSON no trae este escenario.</p>
@@ -194,33 +249,48 @@
         <label title="Con «interrupción técnica», los escenarios sin terminar no cuentan en el logro final">Motivo de cierre
           <select name="closure"><option value="">Sin indicar</option>{% for value, label in sheet.CLOSURES.items() %}<option value="{{ value }}"{% if run.sheet.closure == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
         </label>
+        <label>Observador
+          <input type="text" name="observer" value="{{ run.sheet.observer }}" maxlength="80">
+        </label>
         <label>Versión del juego
           <input type="text" name="gameVersion" value="{{ run.sheet.gameVersion }}" maxlength="80">
         </label>
       </div>
 
-      <div class="table-wrap">
-        <table class="data compact">
-          <thead><tr><th>Pilar</th><th>Criterio 1</th><th>Criterio 2</th><th>Frase, secuencia o esquema que lo respalda</th></tr></thead>
-          <tbody>
-            {% for key, (name, first, second) in sheet.PILLARS.items() %}
-            <tr>
-              <td><strong>{{ name }}</strong></td>
-              {% for number, text in [(1, first), (2, second)] %}
-              <td>
-                <div class="sub">{{ text }}</div>
-                <select name="{{ sheet.criterion(key, number) }}" aria-label="{{ name }}, criterio {{ number }}">
-                  <option value="">Sin valorar</option>
-                  {% for value, label in sheet.CODES.items() %}<option value="{{ value }}"{% if run.sheet[sheet.criterion(key, number)] == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
-                </select>
-              </td>
+      <p class="sub">Perfil de evidencias de cada actividad (E1P a E4P). Cada criterio: <strong>1</strong> si se evidencia, <strong>0</strong> si hubo oportunidad suficiente y no, <strong>NO</strong> si no hubo oportunidad o evidencia. Recoger el plan y la predicción antes de ejecutar; no sustituir después el primer resultado por la mejor respuesta. Anotar la ayuda y el momento en la evidencia.</p>
+      {% for number, scenario in run.scenarios.items() %}
+      <details class="table-view" id="ficha-e{{ number }}"{% if sheet.has_profile(run.sheet, number) or (scenario.started and loop.first) %} open{% endif %}>
+        <summary>E{{ number }}P · {{ TITLES[number][0] }}{% if not scenario.started %} <span class="sub">(no se inició)</span>{% endif %}</summary>
+        <div class="table-wrap">
+          <table class="data compact">
+            <thead><tr><th>Dimensión</th><th>Criterio 1</th><th>Criterio 2</th></tr></thead>
+            <tbody>
+              {% for key, (name, short, code, _, _) in sheet.PILLARS.items() %}
+              {% set observed = sheet.MATRIX[number][key] %}
+              {% set p = sheet.profile(run.sheet, number, key) %}
+              <tr>
+                <td>
+                  <strong>{{ short }}</strong> · {{ name }}<div class="sub mono">{{ code }}</div>
+                  <div class="sub"><em>{{ observed[2] }}</em></div>
+                  <div class="sub">{{ p.C }} de 2 · {{ (p.P ~ ' %') if p.P is not none else 'NC' }}</div>
+                </td>
+                {% for criterion in (1, 2) %}
+                <td>
+                  <div class="sub">{{ observed[criterion - 1] }}</div>
+                  <select name="{{ sheet.criterion(number, key, criterion) }}" aria-label="E{{ number }}, {{ name }}, criterio {{ criterion }}">
+                    <option value="">Sin valorar</option>
+                    {% for value, label in sheet.CODES.items() %}<option value="{{ value }}"{% if run.sheet[sheet.criterion(number, key, criterion)] == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                  </select>
+                  <textarea name="{{ sheet.evidence(number, key, criterion) }}" maxlength="500" placeholder="Frase, secuencia o esquema; ayuda y momento" aria-label="Evidencia de E{{ number }}, {{ name }}, criterio {{ criterion }}">{{ run.sheet[sheet.evidence(number, key, criterion)] }}</textarea>
+                </td>
+                {% endfor %}
+              </tr>
               {% endfor %}
-              <td><textarea name="{{ sheet.evidence(key) }}" maxlength="500" aria-label="Evidencia de {{ name }}">{{ run.sheet[sheet.evidence(key)] }}</textarea></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% endfor %}
 
       <label class="sub" style="display: grid; gap: 4px">Nota
         <textarea name="note" maxlength="2000" placeholder="Por ejemplo: prueba interna, se quitó el visor en el escenario 2…">{{ run.note }}</textarea>

@@ -7,7 +7,7 @@
 <div class="page-head">
   <div>
     <h1>Métricas · dificultad {{ DIFFICULTIES[filters.difficulty]|lower }}</h1>
-    <p class="sub">Dos métricas comunes y tres por escenario, con sus conteos. Describen lo que pasó en el juego; no miden por sí solas el dominio de un pilar.</p>
+    <p class="sub">Dos métricas comunes, tres por escenario y el perfil de evidencias de los pilares de cada actividad, según el documento del 19/10/2026. Los conteos describen lo que pasó en el juego; no miden por sí solos el dominio de un pilar.</p>
   </div>
   <div class="btn-row">
     <a class="btn primary" href="{{ url_for('exportar', name='analisis', fmt='xlsx', **filters.query()) }}">Tabla de análisis (Excel)</a>
@@ -89,6 +89,9 @@
             {% if summary.meta.number != 3 %}<th class="n"><button class="sort" type="button">F</button></th><th class="n"><button class="sort" type="button">% error</button></th>{% endif %}
             {% if summary.meta.events_key == 'attempts' %}<th class="n"><button class="sort" type="button">K</button></th>{% else %}<th class="n">Primer acierto</th>{% endif %}
             {% if summary.meta.number == 3 %}<th class="n"><button class="sort" type="button">C</button></th>{% endif %}
+            {% if summary.meta.events_key == 'attempts' %}<th class="n" title="solutionPercent del primer intento: lo cerca que quedó de la solución. Contexto, no métrica del documento"><button class="sort" type="button">Cercanía 1.º</button></th>{% endif %}
+            {% if summary.meta.number == 1 %}<th class="n" title="E1S · Media de solutionPercent de los intentos que no resolvieron"><button class="sort" type="button">Cercanía fallidos</button></th><th class="n" title="E1S · Mejor solutionPercent sin resolver"><button class="sort" type="button">Mejor sin resolver</button></th><th class="n" title="E1I · 1.er intento: instrucciones que faltan · que sobran · % en orden"><button class="sort" type="button">1.er intento: faltan · sobran · orden</button></th>{% endif %}
+            {% if summary.meta.tries_key %}<th class="n" title="Pruebas (Probar) sin resolver, de todas las pruebas"><button class="sort" type="button">Pruebas fallidas</button></th>{% endif %}
             <th>Observaciones</th>
           </tr>
         </thead>
@@ -114,6 +117,13 @@
             <td class="n">{% if row.M %}{{ row.A }} de {{ row.M }}{% else %}—{% endif %}</td>
             {% endif %}
             {% if summary.meta.number == 3 %}<td class="n">{{ row.C if row.C is not none else '—' }}</td>{% endif %}
+            {% if summary.meta.events_key == 'attempts' %}<td class="n" data-v="{{ row.S1 if row.S1 is not none else '' }}">{{ (row.S1|num ~ ' %') if row.S1 is not none else '—' }}</td>{% endif %}
+            {% if summary.meta.number == 1 %}
+            <td class="n" data-v="{{ row.Smean if row.Smean is not none else '' }}">{{ (row.Smean|num(0) ~ ' %') if row.Smean is not none else '—' }}</td>
+            <td class="n" data-v="{{ row.Sbest if row.Sbest is not none else '' }}">{{ (row.Sbest|num(0) ~ ' %') if row.Sbest is not none else '—' }}</td>
+            <td class="n" data-v="{{ row.I1order if row.I1order is not none else '' }}">{% if row.I1missing is not none %}{{ row.I1missing }} · {{ row.I1extra }} · {{ (row.I1order|num(0) ~ ' %') if row.I1order is not none else '—' }}{% else %}—{% endif %}</td>
+            {% endif %}
+            {% if summary.meta.tries_key %}<td class="n" data-v="{{ row.failedTries if row.tries is not none else '' }}">{{ (row.failedTries ~ ' de ' ~ row.tries) if row.tries is not none else '—' }}</td>{% endif %}
             <td class="sub">{{ [row.gWhy, row.timeWhy if row.seconds is none and row.timeWhy != row.gWhy else '']|select|join(' · ') }}</td>
           </tr>
           {% endfor %}
@@ -122,29 +132,29 @@
     </div>
   </details>
 </div>
-{% endfor %}
 
-<div class="section-head" id="pilares">
-  <h2>Evidencia complementaria de los pilares</h2>
-  <p class="sub">De la ficha de cada sesión: dos criterios por pilar, valorados por quien observa. {{ with_sheet }} de {{ runs|length }} sesiones tienen ficha.</p>
-</div>
-<div class="card">
-  <div class="table-wrap">
-    <table class="data">
+{% set profile = summary.profile %}
+<div class="card" style="margin-top: 16px" id="e{{ summary.meta.number }}p">
+  <h3><span class="code">{{ profile.code }}</span>Perfil de evidencias de los pilares</h3>
+  <p class="sub">De la ficha de cada sesión, no del JSON: dos criterios por dimensión, valorados por quien observa. {{ profile.with_sheet }} de {{ profile.sessions }} sesiones que iniciaron el escenario tienen alguna valoración.</p>
+  <div class="card-body table-wrap">
+    <table class="data compact">
       <thead>
         <tr>
-          <th>Pilar</th><th>Criterios</th>
-          <th class="n" title="Sesiones con los dos criterios observados (1 o 0)">Sesiones valoradas</th>
+          <th>Dimensión</th><th>Criterios observables en esta actividad</th>
+          <th class="n" title="Sesiones con los dos criterios evaluados (1 o 0)">Con los dos</th>
+          <th class="n" title="Sesiones que iniciaron el escenario sin los dos criterios evaluados. Entre paréntesis, las que tienen alguno (NC)">Pendientes</th>
           <th class="n">0 %</th><th class="n">50 %</th><th class="n">100 %</th>
-          <th class="n" title="Promedio del porcentaje de esta lista de dos criterios">Promedio</th>
+          <th class="n" title="Promedio de los porcentajes individuales completos. Las sesiones pendientes no entran como cero">Promedio</th>
         </tr>
       </thead>
       <tbody>
-        {% for row in pillars %}
+        {% for row in profile.rows %}
         <tr>
-          <td class="nowrap"><strong>{{ row.name }}</strong></td>
-          <td class="sub">1. {{ row.criteria[0] }}<br>2. {{ row.criteria[1] }}</td>
+          <td class="nowrap"><strong>{{ row.short }}</strong> · {{ row.name }}<div class="sub mono">{{ row.code }}</div></td>
+          <td class="sub">1. {{ row.criteria[0] }}<br>2. {{ row.criteria[1] }}<br><em>{{ row.question }}</em></td>
           <td class="n">{{ row.n }}</td>
+          <td class="n">{{ row.pending }}{% if row.partial %} <span class="sub">({{ row.partial }} NC)</span>{% endif %}</td>
           {% for count in row.spread %}<td class="n">{{ count if row.n else '—' }}</td>{% endfor %}
           <td class="n">{{ (row.mean|num ~ ' %') if row.mean is not none else 'sin dato' }}</td>
         </tr>
@@ -152,7 +162,8 @@
       </tbody>
     </table>
   </div>
-  <p class="figure-note">El resultado es 0, 50 o 100 % de esta lista de dos criterios, no un porcentaje de dominio del pilar. La ficha se rellena en la página de cada sesión.</p>
+  <p class="figure-note">Cada porcentaje es 0, 50 o 100 % de los dos criterios de esta ficha, solo si los dos se evaluaron; con un NO queda NC. Las cuatro dimensiones se leen por separado: no suman 100 % ni forman una nota global. La ficha se rellena en la página de cada sesión.</p>
 </div>
+{% endfor %}
 {% endif %}
 {% endblock %}

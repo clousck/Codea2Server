@@ -8,7 +8,8 @@ lo que huele a cable olvidado. Son avisos y no errores: un cero puede ser legít
 from collections import defaultdict
 from datetime import timedelta
 
-from .model import Issue, as_flag, as_int, is_selected, parse_utc
+from .model import Issue, as_flag, as_int, is_selected, parse_utc, solution_percent
+from .solutions import compare
 
 # Margen para dar un evento por posterior al fin de su escenario. Hacia el inicio no hay
 # margen: el reto se abre antes de la narración, así que un evento anterior, aunque sea
@@ -64,11 +65,13 @@ def _check_scenario(run, number, scenario, add):
     if scenario.started_at is None:
         add("sin_inicio", "Figura como iniciado, pero sin startedUtc.", number)
 
-    solved = [e for e in events if as_flag(e.get("solved"))]
+    # En el escenario 2 lo que resuelve es la prueba (Probar), no la selección
+    tries = events if scenario.meta.events_key == "attempts" else scenario.tries
+    solved = [e for e in tries if as_flag(e.get("solved"))]
     if scenario.completed:
         if not events:
             add("sin_eventos", "Completado sin ningún evento registrado.", number)
-        elif scenario.meta.events_key == "attempts" and not solved:
+        elif (scenario.meta.events_key == "attempts" or scenario.has_tries) and not solved:
             add("sin_resuelto", "Completado, pero ningún intento quedó marcado como resuelto.", number)
     else:
         if solved:
@@ -81,7 +84,7 @@ def _check_scenario(run, number, scenario, add):
     if scenario.completed and scenario.timed_out:
         add("agotado_y_completado", "Figura a la vez como completado y con el tiempo agotado.", number)
 
-    stamps = [parse_utc(e.get("timestamp")) for e in events]
+    stamps = [parse_utc(e.get("timestamp")) for e in (*events, *scenario.tries)]
     if scenario.started_at:
         early = sum(1 for t in stamps if t and t < scenario.started_at)
         if early:
@@ -110,6 +113,9 @@ def _check_counters(scenario, number, events, add):
     if number == 2:
         wrong = sum(1 for e in events if is_selected(e) and not as_flag(e.get("correct")))
         mismatch("wrongSelections", wrong, "selección(es) incorrecta(s)")
+        if scenario.has_tries:
+            failed = sum(1 for e in scenario.tries if not as_flag(e.get("solved")))
+            mismatch("failedAttempts", failed, "prueba(s) sin resolver")
     elif number == 4:
         wrong = sum(1 for e in events if not as_flag(e.get("correct")))
         mismatch("wrongPlacements", wrong, "colocación(es) incorrecta(s)")
@@ -117,6 +123,26 @@ def _check_counters(scenario, number, events, add):
         failed = scenario.counter("failedAttempts")
         if failed is not None and failed > len(events):
             add("contador", f"failedAttempts vale {failed}, pero solo hay {len(events)} intento(s).", number)
+
+    if scenario.meta.events_key == "attempts":
+        # Un intento que resuelve con una secuencia lejos de la solución: soluciones mal cargadas
+        partial = sum(1 for e in events if as_flag(e.get("solved")) and (solution_percent(e) is not None)
+                      and solution_percent(e) < 100)
+        if partial:
+            add("solucion_parcial", f"{partial} intento(s) resuelto(s) con solutionPercent por debajo de 100: "
+                                    "puede faltar una solución en la variante de dificultad.", number)
+
+    if number == 1:
+        # El visor y el panel calculan lo mismo; si no coinciden, la clave del panel está desfasada
+        differ = 0
+        for event in events:
+            visor, key = solution_percent(event), compare(event.get("sequence"), scenario.difficulty)
+            if visor is not None and key is not None and abs(visor - key["percent"]) > 1:
+                differ += 1
+        if differ:
+            add("clave_distinta", f"En {differ} intento(s), solutionPercent no coincide con la clave de soluciones "
+                                  "del panel: puede que el nivel haya cambiado y haya que actualizar "
+                                  "codea2/solutions.py.", number)
 
     if number == 3:
         untyped = sum(1 for e in events if not str(e.get("itemType") or "").strip())
