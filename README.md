@@ -97,7 +97,12 @@ Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las regl
   coinciden, cuántas están en el orden de la solución. Vale también para los JSON anteriores al
   22/10/2026. La clave copia `CodeaSolutions` de Unity y está en `codea2/solutions.py`: **si
   cambian los niveles del escenario 1, hay que actualizarla**. El aviso `clave_distinta` salta
-  cuando el `solutionPercent` del visor no coincide con el de la clave. Un `-1` en
+  cuando el `solutionPercent` del visor no coincide con el de la clave. E1S usa también la cuenta
+  del panel y no la del visor, que el 22/10/2026 tomaba «Avanzar» como «Avanzar 2».
+- La duración de una sesión es su `totalSeconds`, que no cuenta el visor parado; el aviso
+  `visor_parado` dice cuándo el reloj se fue más de un minuto por encima. Dos eventos idénticos
+  con menos de 0,5 s (`duplicado_tecnico`) y las pruebas con nada marcado (`prueba_vacia`) se
+  avisan pero siguen contando: el documento pide verificarlos antes de descartarlos. Un `-1` en
   `solutionPercent` o `remaining` es «sin dato», nunca un cero.
 - **E1P–E4P** (perfil de evidencias de los pilares) salen de la ficha, no del JSON: por cada
   actividad, dos criterios por dimensión (D descomposición, TD toma de decisiones, PA pensamiento

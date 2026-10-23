@@ -266,10 +266,12 @@ class Run:
     def seconds(self):
         """Duración de la sesión entera: incluye narración y traslados entre salas.
 
-        Sin cierre, vale el totalSeconds de la raíz: el visor lo va actualizando en cada guardado.
+        Vale el totalSeconds de la raíz, que el visor actualiza en cada guardado y no cuenta el
+        tiempo con el visor parado. El reloj entre startedUtc y endedUtc solo se usa en los JSON
+        anteriores al 06/10/2026, que no lo traen: una sesión puede quedarse una hora en Setup.
         """
-        clock = seconds_between(self.started_at, self.ended_at)
-        return clock if clock is not None else as_float(self.raw.get("totalSeconds"))
+        total = as_float(self.raw.get("totalSeconds"))
+        return total if total is not None else seconds_between(self.started_at, self.ended_at)
 
     @property
     def challenge_seconds(self):

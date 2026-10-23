@@ -120,11 +120,13 @@ def scenario_metrics(run, number):
         solved = [ok for ok in (_outcome(e, "solved") for e in events) if ok is not None]
         row["N"] = len(solved)
         row["K"] = _first(solved)
-        # Contexto, no métrica del documento: lo cerca que quedó el primer intento de la solución
-        row["S1"] = next((v for v in (solution_percent(e) for e in events if _outcome(e, "solved") is not None)), None)
+        # Contexto, no métrica del documento: lo cerca que quedó el primer intento de la solución.
+        # En el escenario 1 se usa la cuenta del panel sobre la clave: la del visor falló (22/10/2026)
+        percent = (lambda e: _key_percent(e, run.difficulty)) if number == 1 else solution_percent
+        row["S1"] = next((v for v in (percent(e) for e in events if _outcome(e, "solved") is not None)), None)
         if number == 1:
-            # E1S: solutionPercent de los intentos que no resolvieron (el que resuelve vale 100)
-            failed = [solution_percent(e) for e in events if _outcome(e, "solved") is False]
+            # E1S: cercanía de los intentos que no resolvieron (el que resuelve vale 100)
+            failed = [percent(e) for e in events if _outcome(e, "solved") is False]
             failed = [v for v in failed if v is not None]
             row["Sn"] = len(failed)
             row["Smean"] = sum(failed) / len(failed) if failed else None
@@ -161,6 +163,12 @@ def scenario_metrics(run, number):
             row["tries"] = len(scenario.tries)
             row["failedTries"] = sum(1 for e in scenario.tries if not as_flag(e.get("solved")))
     return row
+
+
+def _key_percent(event, difficulty):
+    """La cuenta de solutionPercent con la clave del panel; sin clave, la del visor."""
+    key = compare(event.get("sequence"), difficulty)
+    return key["percent"] if key else solution_percent(event)
 
 
 def _plan(event):
@@ -282,10 +290,11 @@ def _solution_card(rows):
     pct = lambda stats: f"mediana {_num(stats['median'], 0)}\u00a0%" if stats["n"] else "sin dato"
     return _card("E1S", "Cercanía a la solución", f"{_num(first['median'], 0)}\u00a0%" if first["n"] else "sin dato",
                  f"mediana del 1.er intento en {first['n']} {'sesión' if first['n'] == 1 else 'sesiones'}",
-                 "solutionPercent del visor: subsecuencia común más larga entre el intento y la solución más "
-                 "cercana, dividida entre la más larga de las dos. Resta si falta o sobra una instrucción y "
-                 "si está fuera de orden; no separa las dos cosas. Un -1 (sin solución cargada) queda sin dato. "
-                 "Complemento de E1A y E1B, no métrica del documento.",
+                 "La cuenta de solutionPercent hecha por el panel con la clave de soluciones: subsecuencia común "
+                 "más larga entre el intento y la solución, dividida entre la más larga de las dos. Resta si "
+                 "falta o sobra una instrucción y si está fuera de orden; no separa las dos cosas (eso es E1I). "
+                 "No usa la del visor, que falló el 22/10/2026; vale también para JSON antiguos. Complemento de "
+                 "E1A y E1B, no métrica del documento.",
                  [("Intentos fallidos", pct(mean) + (f" (media por sesión, n = {mean['n']})" if mean["n"] else "")),
                   ("Mejor sin resolver", pct(best)),
                   ("Sin resolución", pct(stuck) + " de su mejor intento" if stuck["n"] else "ninguna con dato")],
@@ -511,11 +520,12 @@ def analysis_table(runs):
         Column("errorInvalidCommand", "int", "E3C · Comandos inválidos"),
         Column("tries", "int", "E2 · Pruebas (Probar). Vacío en los demás escenarios y en los JSON anteriores al 22/10/2026"),
         Column("failedTries", "int", "E2 · Pruebas que no repararon el módulo"),
-        Column("firstSolutionPercent", "float", "solutionPercent del primer intento o ejecución (E1 y E3). Contexto, "
-                                                "no métrica del documento. Vacío si el juego anotó -1"),
-        Column("failedSolutionPercent", "float", "E1S · Media de solutionPercent de los intentos que no resolvieron"),
-        Column("bestFailedSolutionPercent", "float", "E1S · Mejor solutionPercent entre los intentos que no resolvieron"),
-        Column("failedSolutionCount", "int", "E1S · Intentos sin resolver con solutionPercent válido"),
+        Column("firstSolutionPercent", "float", "Cercanía a la solución del primer intento o ejecución. E1: cuenta del "
+                                                "panel sobre la clave; E3: solutionPercent del visor (vacío si anotó -1). "
+                                                "Contexto, no métrica del documento"),
+        Column("failedSolutionPercent", "float", "E1S · Cercanía media de los intentos que no resolvieron (cuenta del panel)"),
+        Column("bestFailedSolutionPercent", "float", "E1S · Mejor cercanía entre los intentos que no resolvieron"),
+        Column("failedSolutionCount", "int", "E1S · Intentos sin resolver con cercanía calculable"),
         Column("firstMissing", "int", "E1I · Instrucciones de la solución que faltan en el primer intento"),
         Column("firstExtra", "int", "E1I · Instrucciones que sobran en el primer intento"),
         Column("firstOrderPct", "float", "E1I · De las instrucciones que coinciden en el primer intento, % en el "

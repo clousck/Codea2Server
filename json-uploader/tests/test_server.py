@@ -513,10 +513,10 @@ class MetricsTest(ServerCase):
         rows = self.analysis("?dif=2")
         e1, e2 = rows[("0007_42_3F9A1.json", "1")], rows[("0007_42_3F9A1.json", "2")]
         e3 = rows[("0007_42_3F9A1.json", "3")]
-        self.assertEqual((e1["N"], e1["K"], e1["F"], e1["firstSolutionPercent"]), ("3", "3", "2", "18"))
+        self.assertEqual((e1["N"], e1["K"], e1["F"], e1["firstSolutionPercent"]), ("3", "3", "2", "18.182"))
         # E1S: los dos intentos fallidos quedaron al 18 % y al 91 % de la solución
         self.assertEqual((e1["failedSolutionPercent"], e1["bestFailedSolutionPercent"], e1["failedSolutionCount"]),
-                         ("54.5", "91", "2"))
+                         ("54.545", "90.909", "2"))
         self.assertIn(">E1S<", self.client.get("/?dif=2", headers=BROWSER).get_data(as_text=True))
         # E1I: el 1.er intento (Girar Izquierda, Avanzar 2) tiene sus 2 instrucciones en orden y le faltan 9
         self.assertEqual((e1["firstMissing"], e1["firstExtra"], e1["firstOrderPct"]), ("9", "0", "100"))
@@ -541,9 +541,28 @@ class MetricsTest(ServerCase):
             attempt["solutionPercent"] = -1
         data["escenario3"]["attempts"][0]["remaining"] = -1
         self.put("0007_42_3F9A1.json", json.dumps(data).encode())
-        self.assertEqual(self.analysis("?dif=2")[("0007_42_3F9A1.json", "1")]["firstSolutionPercent"], "")
+        # El -1 del visor queda vacío; E1S no depende de él porque usa la cuenta del panel
+        e1_attempts = [a for a in self.rows("intentos", "?dif=2") if a["scenario"] == "1"]
+        self.assertEqual({a["solutionPercent"] for a in e1_attempts}, {""})
+        self.assertEqual(self.analysis("?dif=2")[("0007_42_3F9A1.json", "1")]["firstSolutionPercent"], "18.182")
         attempts = [a for a in self.rows("intentos", "?dif=2") if a["scenario"] == "3"]
         self.assertEqual((attempts[0]["remaining"], attempts[0]["loopSlack"]), ("", ""))
+
+    def test_test_sessions_of_22_october(self):
+        # Sesiones de prueba reales en básica con el APK del 22/10/2026
+        for name in ("0103_3_68793.json", "0601_1_7D44A.json"):
+            self.put(name, sample(name))
+        codes = {(i.scenario, i.code) for i in server.dataset.get("0103_3_68793").issues}
+        # El visor dio 62 y 88 donde la cuenta es 50 y 75; una prueba vacía; una colocación doble
+        self.assertTrue({(1, "clave_distinta"), (2, "prueba_vacia"), (4, "duplicado_tecnico")} <= codes, codes)
+        e1 = self.analysis("?dif=1")[("0103_3_68793.json", "1")]
+        self.assertEqual((e1["G"], e1["timedOut"], e1["K"], e1["bestFailedSolutionPercent"]), ("0", "1", "", "75"))
+        # 0601 pasó una hora en Setup: la duración es la de totalSeconds, con su aviso
+        run = server.dataset.get("0601_1_7D44A")
+        self.assertIn("visor_parado", {i.code for i in run.issues})
+        self.assertAlmostEqual(run.seconds, 829.48, places=1)
+        for path in ("/?dif=1", "/escenarios?dif=1", "/sesiones/0103_3_68793", "/sesiones"):
+            self.assertEqual(self.status(path), 200, path)
 
 
 if __name__ == "__main__":

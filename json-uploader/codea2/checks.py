@@ -8,7 +8,7 @@ lo que huele a cable olvidado. Son avisos y no errores: un cero puede ser legít
 from collections import defaultdict
 from datetime import timedelta
 
-from .model import Issue, as_flag, as_int, is_selected, parse_utc, solution_percent
+from .model import Issue, as_flag, as_float, as_int, is_selected, parse_utc, solution_percent
 from .solutions import compare
 
 # Margen para dar un evento por posterior al fin de su escenario. Hacia el inicio no hay
@@ -18,6 +18,12 @@ _SLACK = timedelta(seconds=1)
 
 # Diferencia entre totalSeconds y el reloj a partir de la cual se avisa
 _CLOCK_TOLERANCE = 2.0
+
+# Visor parado: la sesión duró en el reloj más de esto por encima de su totalSeconds
+_IDLE_TOLERANCE = 60.0
+
+# Dos eventos idénticos más juntos que esto son con toda probabilidad un doble registro
+_DOUBLE = timedelta(seconds=0.5)
 
 
 def check_run(run):
@@ -40,6 +46,13 @@ def check_run(run):
                           "la run o el archivo se subió a mitad de partida.")
     elif run.started_at and run.ended_at < run.started_at:
         add("reloj", "endedUtc es anterior a startedUtc.")
+    else:
+        total = as_float(run.raw.get("totalSeconds"))
+        clock = (run.ended_at - run.started_at).total_seconds() if run.started_at else None
+        if total is not None and clock is not None and clock - total > _IDLE_TOLERANCE:
+            add("visor_parado", f"Entre startedUtc y endedUtc pasaron {clock / 60:.0f} min, pero la sesión registró "
+                                f"{total / 60:.0f} min: el visor estuvo parado (en Setup, en el tutorial o en "
+                                "pausa). La duración de la sesión usa totalSeconds.")
 
     for number, scenario in run.scenarios.items():
         _check_scenario(run, number, scenario, add)
@@ -102,6 +115,29 @@ def _check_scenario(run, number, scenario, add):
                                f"({clock:.1f} s) difieren en {abs(clock - total):.1f} s.", number)
 
     _check_counters(scenario, number, events, add)
+    _check_doubles(scenario, number, add)
+
+
+def _fingerprint(event):
+    """Lo que hace igual a dos eventos, sin la hora ni la duración."""
+    return tuple(sorted((k, repr(v)) for k, v in event.items() if k not in ("timestamp", "durationSeconds")))
+
+
+def _check_doubles(scenario, number, add):
+    """Dos eventos idénticos casi a la vez. No se quitan del conteo: el documento (8.3) pide
+    verificar los duplicados técnicos con la aplicación antes de descartarlos."""
+    for kind, events in (("evento(s)", scenario.events), ("prueba(s)", scenario.tries)):
+        doubles, previous = 0, None
+        for event in events:
+            moment = parse_utc(event.get("timestamp"))
+            if previous and moment and previous[0] and moment - previous[0] < _DOUBLE \
+                    and _fingerprint(event) == previous[1]:
+                doubles += 1
+            previous = (moment, _fingerprint(event))
+        if doubles:
+            add("duplicado_tecnico", f"{doubles} {kind} idéntico(s) al anterior con menos de 0,5 s de diferencia: "
+                                     "probable doble registro. Siguen contando; exclúyase la sesión o corríjase a mano "
+                                     "si se confirma.", number)
 
 
 def _check_counters(scenario, number, events, add):
@@ -111,6 +147,10 @@ def _check_counters(scenario, number, events, add):
             add("contador", f"{key} vale {stored}, pero en la lista hay {counted} {what}.", number)
 
     if number == 2:
+        empty = sum(1 for e in scenario.tries if isinstance(e.get("selection"), list) and not e["selection"])
+        if empty:
+            add("prueba_vacia", f"{empty} prueba(s) con nada marcado: el juego las cuenta en failedAttempts, pero "
+                                "no son una decisión. Puede ser una doble pulsación de Probar.", number)
         wrong = sum(1 for e in events if is_selected(e) and not as_flag(e.get("correct")))
         mismatch("wrongSelections", wrong, "selección(es) incorrecta(s)")
         if scenario.has_tries:
@@ -141,9 +181,10 @@ def _check_counters(scenario, number, events, add):
             if visor is not None and key is not None and abs(visor - key["percent"]) > 1:
                 differ += 1
         if differ:
-            add("clave_distinta", f"En {differ} intento(s), solutionPercent no coincide con la clave de soluciones "
-                                  "del panel: puede que el nivel haya cambiado y haya que actualizar "
-                                  "codea2/solutions.py.", number)
+            add("clave_distinta", f"En {differ} intento(s), el solutionPercent del visor no coincide con la cuenta "
+                                  "del panel sobre la clave de soluciones. O el cálculo del visor falla (visto el "
+                                  "22/10/2026: trataba «Avanzar» como «Avanzar 2») o el nivel cambió y hay que "
+                                  "actualizar codea2/solutions.py. E1S usa la cuenta del panel.", number)
 
     if number == 3:
         untyped = sum(1 for e in events if not str(e.get("itemType") or "").strip())
