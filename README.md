@@ -12,7 +12,7 @@ Corre en Docker en la Raspberry Pi, detrás del túnel de Cloudflare:
 ## Actualizar la Raspberry Pi
 
 ```bash
-cd ~/Services/JSONServer      # la carpeta de este repositorio en la Pi
+cd ~/Git/Codea2Server        # la carpeta de este repositorio en la Pi
 git pull
 docker compose up -d --build
 ```
