@@ -7,7 +7,7 @@ services:
       # 26332 es CODEA en un teclado de teléfono (C=2 O=6 D=3 E=3 A=2). El túnel de Cloudflare
       # apunta a http://raspberrypi:26332; dentro del contenedor se escucha en el 8080.
       # Sin esta línea Cloudflare devuelve 502 con el servidor perfectamente vivo.
-      # CODEA2_BIND=127.0.0.1 lo deja solo para la propia máquina (cuando delante va Caddy).
+      # CODEA2_BIND=127.0.0.1 lo deja solo para la propia máquina (con un servidor web o Caddy delante).
       - "${CODEA2_BIND:-0.0.0.0}:26332:8080"
     environment:
       # Se pueden cambiar en un archivo .env junto a este (ver .env.example)

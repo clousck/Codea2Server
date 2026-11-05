@@ -10,122 +10,117 @@ Todo corre en Docker; el equipo no necesita nada más instalado. Hay dos instala
 
 - **La Raspberry Pi**, detrás del túnel de Cloudflare: **<https://codea2.penginexr.com>**
   (ver [Actualizar la Raspberry Pi](#actualizar-la-raspberry-pi)).
-- **Una laptop con Windows en Yachay, publicada por el servidor de la universidad, sin
-  Cloudflare**: ver [Instalar en un servidor nuevo](#instalar-en-un-servidor-nuevo-windows-sin-cloudflare).
+- **El servidor de Yachay**, con IP pública propia y sin Cloudflare: ver
+  [Instalar en el servidor de Yachay](#instalar-en-el-servidor-de-yachay-ip-pública-sin-cloudflare).
 
-## Instalar en un servidor nuevo (Windows, sin Cloudflare)
+## Instalar en el servidor de Yachay (IP pública, sin Cloudflare)
 
-Intervienen **dos computadoras**:
+Una sola máquina hace todo: el servidor de Yachay tiene la IP pública, corre Docker, guarda los
+datos y publica el panel y la subida de los visores.
 
 ```text
-  Visores / navegador                Servidor de Yachay                  Laptop (Windows)
-  -------------------   internet     ------------------   red interna   -------------------------
-  https://dominio/... ─────────────▶ IP pública         ──────────────▶ Docker Desktop
-                                     (proxy o reenvío                    contenedor json-uploader
-                                      de puertos)                        puerto 26332, uploads/
+  Visores / navegador        internet        Servidor de Yachay (IP pública)
+  https://DOMINIO/upload  ───────────────▶   puerto 443 (HTTPS) ─▶ contenedor json-uploader :26332
+                                                                    datos en uploads/
 ```
 
-- **La laptop** levanta el servicio con Docker y guarda los datos. Es la que se configura con
-  este README. Lo único que se instala en ella es **Docker Desktop** (y, si se quiere, Git para
-  actualizar con un comando).
-- **El servidor de Yachay** tiene la IP pública y hace llegar las peticiones a la laptop. Lo
-  administra TI de Yachay; aquí solo se dice qué tiene que hacer.
+En el servidor solo hace falta **Docker** (y Git para descargar y actualizar el código). Python,
+el servidor y, si se quiere, el HTTPS van dentro de contenedores. Los comandos van para
+**Linux** (lo habitual en un servidor) y, cuando cambian, también para **Windows**.
 
 ### 0. Preguntas para TI de Yachay (antes de empezar)
 
-Con las respuestas se elige la opción del [paso 5](#5-publicarlo-a-través-del-servidor-de-yachay).
-Se pueden copiar tal cual en un correo:
+Con las respuestas se elige la opción del [paso 5](#5-publicarlo-en-internet). Se pueden copiar
+tal cual en un correo:
 
-**Sobre el servidor de Yachay**
+**El servidor**
 
-1. ¿Qué hace exactamente con nuestro tráfico? ¿Es un **servidor web con proxy inverso** (nginx,
-   Apache, IIS, Caddy…) que puede publicar un sitio HTTPS y reenviarlo a otra máquina, o es un
-   **firewall/router que solo reenvía puertos** (NAT)?
-2. ¿Cuál es la **IP pública**? ¿Es fija?
-3. ¿Nos pueden dar un **dominio o subdominio** (por ejemplo `codea2.yachaytech.edu.ec`) con un
-   registro DNS `A` hacia esa IP pública?
-4. Si es proxy: ¿ponen ellos el **certificado HTTPS** para ese dominio?
-5. Si es reenvío de puertos: ¿pueden reenviar los puertos **80 y 443** (TCP) a la laptop? Si no,
-   ¿qué puerto pueden reenviar hacia el **26332** de la laptop?
-6. ¿El proxy puede enviar las cabeceras `X-Forwarded-For` y `X-Forwarded-Proto`, aceptar
-   cuerpos de hasta **20 MB** y esperar al menos **60 s** por la respuesta (las descargas del
-   panel tardan algo con muchos datos)?
+1. ¿Qué sistema operativo tiene (Ubuntu, Debian, Rocky, Windows Server…)? ¿Tendremos acceso de
+   administrador (`sudo`) o lo instalan ustedes?
+2. ¿Se puede instalar **Docker** con el plugin `docker compose`? ¿Ya lo tiene?
+3. ¿El servidor ya publica **otras webs**? Si es así, ¿con qué servidor web (nginx, Apache,
+   IIS, Caddy…) y quién lo administra? Entonces los puertos 80 y 443 ya están ocupados y lo
+   nuestro se añade como un sitio más.
+4. ¿Cuánto disco libre hay y se hacen **copias de seguridad** del servidor? (Los datos de CODEA 2
+   ocupan poco: unos MB por cientos de sesiones.)
 
-**Sobre la laptop en su red**
+**La red**
 
-7. ¿Dónde se conecta la laptop (cable o wifi, qué red/VLAN) y **el servidor de Yachay puede
-   llegar a ella**? Hay que poder abrir `http://IP-de-la-laptop:26332` desde el servidor.
-8. ¿Le pueden dar a la laptop una **IP interna fija** (reserva DHCP por su MAC)? Si cambia, el
-   servidor de Yachay deja de encontrarla.
-9. ¿Hay que **registrar la laptop** (MAC, inventario, antivirus obligatorio) para conectarla a
-   esa red? ¿Hay algún bloqueo a que una máquina de usuario reciba conexiones entrantes?
+5. ¿Cuál es la **IP pública** y es fija? ¿Está **directamente** en el servidor o delante hay un
+   firewall de la universidad que reenvía puertos? Si lo hay, ¿qué puertos abren hacia el
+   servidor? Lo ideal, **443 y 80** (TCP).
+6. ¿Nos pueden dar un **dominio o subdominio** (por ejemplo `codea2.yachaytech.edu.ec`) con un
+   registro DNS `A` hacia la IP pública? Sin dominio no hay certificado HTTPS normal.
+7. Si ya tienen servidor web: ¿ponen ellos el **certificado HTTPS** del dominio (o usan Let's
+   Encrypt)?
 
-**Sobre los visores (Meta Quest)**
+**Los visores (Meta Quest)**
 
-10. ¿Desde qué red suben los visores? Si es la **wifi de la universidad**, ¿desde dentro se
-    puede abrir el dominio o la IP pública? (Algunas redes no dejan entrar a la IP pública desde
-    dentro; entonces hace falta que el DNS interno resuelva el dominio a la IP del servidor.)
-11. ¿Esa wifi tiene portal cautivo, inspección HTTPS o bloqueo de puertos que afecte a los visores?
+8. ¿Desde qué red suben los visores? Si es la **wifi de la universidad**, ¿desde dentro se
+   puede abrir el dominio o la IP pública? (Algunas redes no dejan entrar a la IP pública desde
+   dentro; entonces el DNS interno tiene que resolver el dominio a la IP interna del servidor.)
+9. ¿Esa wifi tiene portal cautivo, inspección HTTPS o bloqueo de puertos que afecte a los visores?
 
-**Sobre el mantenimiento**
+**El mantenimiento**
 
-12. ¿Quién de TI se encarga si el servidor de Yachay se reinicia o cambia su configuración, y
-    a quién avisamos si deja de verse desde fuera?
+10. ¿A quién avisamos si el servidor se reinicia, cambia de configuración o deja de verse desde
+    fuera?
 
-### 1. Preparar la laptop
+### 1. Instalar Docker
 
-1. **Virtualización activada** en la BIOS/UEFI (Intel VT-x o AMD-V). En el Administrador de
-   tareas → Rendimiento → CPU tiene que poner *Virtualización: Habilitado*.
-2. **Docker Desktop** desde <https://www.docker.com/products/docker-desktop/>, con la opción
-   *Use WSL 2* marcada. Funciona en Windows Home y Pro. Si al terminar pide instalar o actualizar
-   WSL, en PowerShell como administrador: `wsl --install` (o `wsl --update`) y reiniciar.
-   > Docker Desktop es gratuito para uso educativo y organizaciones pequeñas; si la universidad
-   > lo usa a gran escala, que TI confirme la licencia.
-3. En Docker Desktop → *Settings* → *General*: marcar **Start Docker Desktop when you sign in
-   to your computer**.
-4. **Inicio de sesión automático.** Docker Desktop solo arranca cuando alguien inicia sesión en
-   Windows; tras un corte de luz o una actualización, la laptop tiene que entrar sola:
-   - Configuración → Cuentas → Opciones de inicio de sesión: desactivar *Para mejorar la
-     seguridad, permitir solo el inicio de sesión de Windows Hello…*.
-   - `Win + R` → `netplwiz` → desmarcar *Los usuarios deben escribir su nombre de usuario y
-     contraseña…* → Aceptar y escribir la contraseña de la cuenta.
-   - Conviene una cuenta local dedicada a esto y bloquear la pantalla (`Win + L`) al irse.
-5. **Que no se duerma** (PowerShell como administrador):
+**Linux** (Ubuntu o Debian; para otras distribuciones, <https://docs.docker.com/engine/install/>):
 
-   ```powershell
-   powercfg /change standby-timeout-ac 0          # no suspender enchufada
-   powercfg /change hibernate-timeout-ac 0
-   powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0   # cerrar la tapa: nada
-   powercfg /setactive SCHEME_CURRENT
-   ```
+```bash
+curl -fsSL https://get.docker.com | sudo sh    # Docker Engine y el plugin compose
+sudo systemctl enable --now docker             # arranca con el servidor
+sudo usermod -aG docker $USER                  # usar docker sin sudo (cerrar sesión y volver a entrar)
+docker compose version
+```
 
-   Y dejarla siempre enchufada, con cable de red mejor que wifi. En Windows Update → Opciones
-   avanzadas, poner un *horario de actividad* amplio para que no se reinicie en plena sesión.
+Docker arranca solo con el servidor y el contenedor (`restart: unless-stopped`) también: tras
+un reinicio no hay que hacer nada.
+
+**Windows** (10/11): **Docker Desktop** desde <https://www.docker.com/products/docker-desktop/>,
+con *Use WSL 2*. Necesita la virtualización activada en la BIOS (Administrador de tareas →
+Rendimiento → CPU: *Virtualización: Habilitado*); si pide WSL, `wsl --install` como
+administrador y reiniciar. Docker Desktop **solo arranca cuando alguien inicia sesión**, así que:
+
+- Docker Desktop → *Settings* → *General*: marcar **Start Docker Desktop when you sign in**.
+- Inicio de sesión automático: Configuración → Cuentas → Opciones de inicio de sesión →
+  desactivar *permitir solo el inicio de sesión de Windows Hello*; luego `Win + R` → `netplwiz`
+  → desmarcar *Los usuarios deben escribir su nombre de usuario y contraseña*.
+- Que no se suspenda (PowerShell como administrador):
+  `powercfg /change standby-timeout-ac 0` y `powercfg /change hibernate-timeout-ac 0`.
+
+> Docker Desktop no está soportado oficialmente en Windows Server, y es gratuito para uso
+> educativo y organizaciones pequeñas; si la universidad lo usa a gran escala, que TI confirme la
+> licencia. En un servidor, Linux da menos guerra.
 
 ### 2. Descargar el código
 
-Con **Git** (<https://git-scm.com/download/win>), que permite actualizar luego con `git pull`.
-En PowerShell:
+```bash
+# Linux
+sudo mkdir -p /opt/codea2 && sudo chown $USER /opt/codea2
+cd /opt/codea2
+git clone https://github.com/clousck/Codea2Server.git
+cd Codea2Server
+```
 
 ```powershell
-mkdir C:\CODEA2
-cd C:\CODEA2
+# Windows (Git desde https://git-scm.com/download/win)
+mkdir C:\CODEA2; cd C:\CODEA2
 git clone https://github.com/clousck/Codea2Server.git
 cd Codea2Server
 ```
 
 Si el repositorio es privado, Git pedirá iniciar sesión en GitHub con una cuenta que tenga
-acceso. **Sin Git:** en GitHub, *Code → Download ZIP*, descomprimir en `C:\CODEA2\Codea2Server`
-y, para actualizar, repetir la descarga **sin tocar** la carpeta `uploads` ni el `.env`.
-
-> Mejor una ruta corta y fuera de OneDrive: si OneDrive sincroniza la carpeta, puede bloquear
-> archivos de `uploads/` mientras el servidor escribe.
+acceso. En Windows, mejor una ruta fuera de OneDrive (puede bloquear archivos de `uploads/`).
 
 ### 3. Configurar
 
-```powershell
-copy .env.example .env
-notepad .env
+```bash
+cp .env.example .env        # Windows: copy .env.example .env
+nano .env                   # Windows: notepad .env
 ```
 
 Lo mínimo:
@@ -138,89 +133,108 @@ DASHBOARD_PASSWORD=una-contraseña-larga    # la del panel; sin ella, el panel s
 Y lo que diga la opción elegida en el paso 5 (`CODEA2_DOMINIO`, `CODEA2_BIND`, `TRUSTED_PROXY`).
 Las demás variables están en [Configuración](#configuración).
 
-### 4. Arrancar y comprobar en la propia laptop
+### 4. Arrancar y comprobar en el propio servidor
 
-Con Docker Desktop abierto (la ballena en la bandeja, en verde), en la carpeta del repositorio:
+En la carpeta del repositorio:
 
-```powershell
+```bash
 docker compose up -d --build
-docker ps                                    # json-uploader: Up … (healthy) al cabo de un minuto
-curl.exe http://localhost:26332/health       # {"status":"alive"}
+docker ps                                       # json-uploader: Up … (healthy) al cabo de un minuto
+curl http://localhost:26332/health              # {"status":"alive"}   (Windows: curl.exe)
 ```
 
-El panel queda en <http://localhost:26332>. La primera vez Windows puede preguntar si deja a
-Docker usar la red: **permitir en redes privadas y públicas**. El contenedor tiene
-`restart: unless-stopped`, así que vuelve solo cada vez que arranca Docker Desktop.
+Registros: `docker logs -f json-uploader`.
 
-### 5. Publicarlo a través del servidor de Yachay
+### 5. Publicarlo en internet
 
-Elegir **una** opción según lo que haya respondido TI. En las tres, `IP-LAPTOP` es la IP interna
-fija de la laptop (`ipconfig` → *Dirección IPv4*) e `IP-SERVIDOR`, la interna del servidor de Yachay.
+Elegir **una** opción según lo que haya respondido TI.
 
-#### Opción A — El servidor de Yachay es un proxy con HTTPS (la más sencilla)
+#### Opción A — El servidor ya tiene un servidor web (nginx, Apache, IIS…) en el 80/443
 
-TI publica `https://dominio` en su servidor y lo reenvía a `http://IP-LAPTOP:26332`. Con nginx,
-por ejemplo (con IIS, Apache o Caddy es equivalente):
+Lo más probable si el servidor «sirve para todo». CODEA 2 se añade como un sitio más, que
+reenvía a `http://127.0.0.1:26332`. En el `.env`:
+
+```ini
+CODEA2_BIND=127.0.0.1      # el 26332 solo se ve desde el propio servidor: se entra por el servidor web
+```
+
+`docker compose up -d` para aplicarlo. Con nginx, el sitio queda así (con Apache o IIS es
+equivalente; el certificado, el que ya usen):
 
 ```nginx
 server {
     listen 443 ssl;
     server_name codea2.yachaytech.edu.ec;
-    # ssl_certificate / ssl_certificate_key: los de la universidad
+    # ssl_certificate / ssl_certificate_key: los de la universidad, o los de certbot
     client_max_body_size 20m;
     proxy_read_timeout 120s;
     location / {
-        proxy_pass http://IP-LAPTOP:26332;
+        proxy_pass http://127.0.0.1:26332;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
+server {
+    listen 80;
+    server_name codea2.yachaytech.edu.ec;
+    return 301 https://$host$request_uri;
+}
 ```
 
-En la laptop, abrir el 26332 en el firewall de Windows **solo para el servidor de Yachay**
-(PowerShell como administrador):
+`sudo nginx -t && sudo systemctl reload nginx`. Sin certificado de la universidad, `certbot
+--nginx -d codea2.yachaytech.edu.ec` lo saca de Let's Encrypt y lo renueva solo.
 
-```powershell
-New-NetFirewallRule -DisplayName "CODEA2 26332" -Direction Inbound -Protocol TCP -LocalPort 26332 -RemoteAddress IP-SERVIDOR -Action Allow
-```
+#### Opción B — Los puertos 80 y 443 están libres: HTTPS con Caddy en Docker
 
-El `.env` no necesita nada más: `TRUSTED_PROXY` por defecto ya acepta las cabeceras del proxy.
-
-#### Opción B — El servidor de Yachay reenvía los puertos 80 y 443: HTTPS con Caddy en la laptop
-
-TI apunta el dominio a la IP pública y reenvía los puertos **80 y 443** TCP a `IP-LAPTOP`. El
-certificado lo saca y lo renueva **Caddy**, otro contenedor en la laptop
-(`docker-compose.https.yml`). En el `.env`:
+Si en el servidor no hay otro servidor web, Caddy (otro contenedor, `docker-compose.https.yml`)
+atiende el 80 y el 443 y saca y renueva solo el certificado de Let's Encrypt. Hace falta el
+dominio apuntando a la IP pública. En el `.env`:
 
 ```ini
 CODEA2_DOMINIO=codea2.yachaytech.edu.ec    # el que haya dado TI
 CODEA2_BIND=127.0.0.1                      # el 26332 deja de verse desde fuera: se entra por Caddy
 ```
 
-Abrir 80 y 443 en el firewall de Windows y arrancar con los dos archivos:
+Arrancar con los dos archivos:
 
-```powershell
-New-NetFirewallRule -DisplayName "CODEA2 HTTP/HTTPS" -Direction Inbound -Protocol TCP -LocalPort 80,443 -Action Allow
+```bash
 docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
 docker logs -f codea2-caddy        # "certificate obtained successfully"
 ```
 
-A partir de aquí, **todos** los `docker compose` de esta laptop llevan los dos `-f`. Si en los
-registros de Caddy sale un error de *challenge*, el puerto 80 o el 443 no llega desde internet a
-la laptop (o el DNS aún no apunta a la IP): es cosa del reenvío del servidor de Yachay.
+A partir de aquí, **todos** los `docker compose` de este servidor llevan los dos `-f`. Si en los
+registros de Caddy sale un error de *challenge*, el 80 o el 443 no llega desde internet (firewall
+del servidor o de la universidad) o el DNS aún no apunta a la IP.
 
 #### Opción C — Solo IP pública, sin dominio (HTTP, último recurso)
 
-El servidor de Yachay reenvía un puerto de la IP pública (`PUERTO`) al 26332 de la laptop.
-Funciona, pero **sin cifrar**: la contraseña del panel y los datos de los niños viajan en claro.
-Solo para salir del paso mientras llega el dominio.
+Los visores suben directamente a `http://IP-PÚBLICA:26332/upload`. Funciona, pero **sin
+cifrar**: la contraseña del panel y los datos de los niños viajan en claro. Solo para salir del
+paso mientras llega el dominio.
 
 - En el `.env`: `TRUSTED_PROXY=no` (sin proxy delante, las cabeceras `X-Forwarded-*` las
-  escribiría el cliente) y `docker compose up -d` para aplicarlo.
-- Firewall de Windows: la regla del 26332 de la opción A, pero sin `-RemoteAddress`.
-- En Unity hay que permitir HTTP sin cifrar (ver el [paso 7](#7-el-apk)) y la URL del visor queda
-  `http://IP-PÚBLICA:PUERTO/upload`.
+  escribiría el cliente) y `CODEA2_BIND` vacío. `docker compose up -d` para aplicarlo.
+- Abrir el 26332 en el firewall de la universidad, si lo hay.
+- En Unity hay que permitir HTTP sin cifrar (ver el [paso 7](#7-el-apk)).
+
+#### Firewall del servidor
+
+| Opción | Puertos de entrada |
+|---|---|
+| A y B | 80 y 443 (TCP). El 26332 no: con `CODEA2_BIND=127.0.0.1` ya no se ve desde fuera |
+| C | 26332 (TCP) |
+
+```bash
+sudo ufw allow 80,443/tcp          # Linux con ufw (opción C: sudo ufw allow 26332/tcp)
+```
+
+```powershell
+New-NetFirewallRule -DisplayName "CODEA2" -Direction Inbound -Protocol TCP -LocalPort 80,443 -Action Allow   # Windows (C: -LocalPort 26332)
+```
+
+> En Linux, **los puertos que publica Docker se saltan `ufw`**: un `ufw deny 26332` no lo cierra.
+> Para que el 26332 no se vea desde fuera está `CODEA2_BIND=127.0.0.1`.
 
 ### Comprobar con /health, tramo a tramo
 
@@ -231,25 +245,24 @@ secas es otra cosa); en Linux o macOS, `curl`.
 
 | # | Desde | Comando | Si falla, el problema está en… |
 |---|---|---|---|
-| 1 | La laptop | `curl.exe http://localhost:26332/health` | Docker: `docker ps`, `docker logs json-uploader` |
-| 2 | Otro equipo de la red de la laptop | `curl.exe http://IP-LAPTOP:26332/health` | El firewall de Windows de la laptop (con la opción B no responde a propósito: pasar al 3) |
-| 3 | El servidor de Yachay | A y C: `curl http://IP-LAPTOP:26332/health` · B: `curl --resolve DOMINIO:443:IP-LAPTOP https://DOMINIO/health` | La red entre las dos máquinas, o la IP de la laptop cambió |
-| 4 | Internet (un móvil con datos, sin wifi) | A y B: `https://DOMINIO/health` · C: `http://IP-PÚBLICA:PUERTO/health` | El proxy, el DNS o el reenvío de puertos del servidor de Yachay |
-| 5 | La wifi de los visores | Lo mismo que el 4, en el navegador del Quest | La wifi: no deja salir, o no deja entrar a la IP pública desde dentro (pregunta 10) |
+| 1 | El servidor | `curl http://localhost:26332/health` | Docker: `docker ps`, `docker logs json-uploader` |
+| 2 | El servidor, por su nombre público | A y B: `curl --resolve DOMINIO:443:127.0.0.1 https://DOMINIO/health` | El sitio de nginx/Apache/IIS (A) o Caddy (B): `docker logs codea2-caddy` |
+| 3 | Internet (un móvil con datos, sin wifi) | A y B: `https://DOMINIO/health` · C: `http://IP-PÚBLICA:26332/health` | El DNS, el firewall del servidor o el de la universidad |
+| 4 | La wifi de los visores | Lo mismo que el 3, en el navegador del Quest | La wifi: no deja salir, o no deja entrar a la IP pública desde dentro (pregunta 8) |
 
-Después, **la clave del visor**, sin guardar nada (`URL` es la del tramo 4, sin `/health`):
+Después, **la clave del visor**, sin guardar nada (`URL` es la del tramo 3, sin `/health`):
 
-```powershell
-curl.exe -i -X POST URL/upload                                    # 401: falta la clave (bien)
-curl.exe -i -X POST URL/upload -H "X-API-Key: CLAVE-DEL-APK"      # 400 {"error":"no file field"}: la clave es correcta
+```bash
+curl -i -X POST URL/upload                                    # 401: falta la clave (bien)
+curl -i -X POST URL/upload -H "X-API-Key: CLAVE-DEL-APK"      # 400 {"error":"no file field"}: la clave es correcta
 ```
 
 Un 401 en la segunda significa que `UPLOAD_API_KEY` del `.env` no es la del APK. Luego, **una
 subida de verdad** con una sesión de ejemplo del repositorio, desde su carpeta (aparece en el
 panel con PIN `0101`; después, excluirla en *Sesiones*):
 
-```powershell
-curl.exe -X POST URL/upload -H "X-API-Key: CLAVE-DEL-APK" -F "file=@JSON Samples/0101_5_00000.json"
+```bash
+curl -X POST URL/upload -H "X-API-Key: CLAVE-DEL-APK" -F "file=@JSON Samples/0101_5_00000.json"
 # {"saved_as":"0101_5_00000.json","status":"ok"}
 ```
 
@@ -262,7 +275,8 @@ sesiones **y las fichas, notas y exclusiones**:
 
 1. En el panel de la Pi: *Archivos → Descargar todos* (`/exportar/originales.zip`). El ZIP
    lleva los JSON y `.codea2-panel.json`.
-2. Descomprimirlo **dentro** de `C:\CODEA2\Codea2Server\uploads`, reemplazando lo que haya.
+2. Descomprimirlo **dentro** de la carpeta `uploads` del repositorio, reemplazando lo que haya
+   (Linux: `unzip -o codea2_json_originales.zip -d uploads`).
 3. `docker compose restart` (con los dos `-f` si es la opción B) y comprobar en *Sesiones*.
 
 Si las dos instalaciones reciben subidas a la vez durante un tiempo, se puede repetir: los JSON
@@ -272,8 +286,8 @@ con el mismo nombre son la misma sesión. Pero la ficha (`.codea2-panel.json`) e
 ### 7. El APK
 
 En el proyecto de Unity, el `JSONUploader` de las escenas **Juego** y **Setup**: la URL pasa a
-`https://DOMINIO/upload` (o la de la opción C) y la clave sigue siendo `UPLOAD_API_KEY`.
-Recompilar e instalar en los visores.
+`https://DOMINIO/upload` (o `http://IP-PÚBLICA:26332/upload` en la opción C) y la clave sigue
+siendo `UPLOAD_API_KEY`. Recompilar e instalar en los visores.
 
 - **Opción C (HTTP):** *Project Settings → Player → Android → Other Settings → Allow downloads
   over HTTP* → **Always allowed**. Sin eso, Android rechaza la subida antes de salir del visor.
@@ -281,23 +295,22 @@ Recompilar e instalar en los visores.
 - Lo que un visor ya subió a la Pi queda apuntado como subido y **no** se vuelve a mandar al
   servidor nuevo: esas sesiones llegan con el ZIP del [paso 6](#6-traer-los-datos-de-la-raspberry-pi).
 
-### 8. Actualizar
+### 8. Actualizar y copias de seguridad
 
-```powershell
-cd C:\CODEA2\Codea2Server
+```bash
+cd /opt/codea2/Codea2Server        # Windows: cd C:\CODEA2\Codea2Server
 git pull
 docker compose up -d --build
 # opción B: docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
 ```
 
-Registros: `docker logs -f json-uploader`. Copia de seguridad: *Archivos → Descargar todos*
-desde el panel, o copiar la carpeta `uploads` entera (incluidos los archivos que empiezan por
-punto).
+Copia de seguridad: *Archivos → Descargar todos* desde el panel, o copiar la carpeta `uploads`
+entera (incluidos los archivos que empiezan por punto). Si TI hace copias del servidor, que
+incluyan esa carpeta.
 
-> Con Docker Desktop en Windows y las opciones B o C, la IP que se ve en los registros y en el
-> bloqueo de contraseñas es la interna de Docker, no la del cliente. Consecuencia: tras 8
-> contraseñas mal puestas, el panel queda bloqueado 10 minutos **para todos**, no solo para quien
-> se equivocó. Con la opción A sí se ve la IP real, porque la manda el proxy de TI.
+> Con Docker Desktop en Windows, la IP que se ve en los registros y en el bloqueo de contraseñas
+> es la interna de Docker, no la del cliente (en Linux, y en la opción A, sí se ve la real). En
+> ese caso, tras 8 contraseñas mal puestas el panel queda bloqueado 10 minutos **para todos**.
 
 ## Actualizar la Raspberry Pi
 
@@ -520,16 +533,18 @@ Dentro de `uploads/` el panel solo escribe eso y `.codea2-panel.json` (sesiones 
   8 intentos fallidos hay que esperar 10 minutos.
 - **Un error 500:** el motivo está en `docker logs -f json-uploader`.
 - **Windows: `docker` no se reconoce o no conecta** (`error during connect`, `pipe/docker_engine`):
-  Docker Desktop no está abierto o aún está arrancando. Abrirlo y esperar a que la ballena esté
-  en verde. Si no arranca: virtualización desactivada en la BIOS o WSL sin instalar
-  (`wsl --install`, como administrador, y reiniciar).
-- **Windows: tras reiniciar la laptop el servidor no responde:** nadie ha iniciado sesión
-  (Docker Desktop no arranca sin sesión) o falta *Start Docker Desktop when you sign in*. Ver el
-  [paso 1](#1-preparar-la-laptop).
-- **Windows: funciona en `localhost` pero no desde fuera:** por orden, el firewall de Windows (la
-  regla del paso 5), la IP interna de la laptop (¿ha cambiado? `ipconfig`) y el reenvío de
-  puertos de TI. Desde otro equipo de la misma red, `http://IP-interna:26332/health` separa lo
-  primero de lo último (con la opción B y `CODEA2_BIND=127.0.0.1` eso no responde: es lo esperado).
+  Docker Desktop no está abierto o aún está arrancando. Si no arranca: virtualización desactivada
+  en la BIOS o WSL sin instalar (`wsl --install`, como administrador, y reiniciar).
+- **Windows: tras reiniciar el servidor no responde:** nadie ha iniciado sesión (Docker Desktop
+  no arranca sin sesión) o falta *Start Docker Desktop when you sign in*. Ver el
+  [paso 1](#1-instalar-docker).
+- **Linux: `permission denied` al usar `docker`:** falta cerrar sesión y volver a entrar tras el
+  `usermod -aG docker`, o usar `sudo docker …`.
+- **Funciona en `localhost` pero no desde fuera:** seguir la tabla de
+  [Comprobar con /health](#comprobar-con-health-tramo-a-tramo); el primer tramo que falla dice
+  dónde está el problema.
+- **502 o 504 de nginx/Apache (opción A):** el servidor web no llega a `127.0.0.1:26332`: el
+  contenedor está parado (`docker ps`) o el sitio apunta a otro puerto.
 - **Opción B: el navegador avisa de certificado no válido:** Caddy aún no lo ha conseguido;
   `docker logs codea2-caddy` dice por qué (casi siempre, el 80 o el 443 no llegan desde fuera).
 - **Volver a la versión anterior** (solo subida, puerto 8090):
@@ -548,7 +563,7 @@ python -m unittest discover tests
 
 ```
 docker-compose.yml        el servicio, el puerto y las variables
-docker-compose.https.yml  Caddy con HTTPS, para un servidor sin túnel de Cloudflare
+docker-compose.https.yml  Caddy con HTTPS, para el servidor de Yachay (opción B)
 caddy/Caddyfile           su configuración
 json-uploader/
   server.py               rutas: subida, acceso, páginas y descargas
