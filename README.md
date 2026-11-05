@@ -24,9 +24,9 @@ datos y publica el panel y la subida de los visores.
                                                                     datos en uploads/
 ```
 
-En el servidor solo hace falta **Docker** (y Git para descargar y actualizar el código). Python,
-el servidor y, si se quiere, el HTTPS van dentro de contenedores. Los comandos van para
-**Linux** (lo habitual en un servidor) y, cuando cambian, también para **Windows**.
+El servidor es **Ubuntu**. Solo hace falta **Docker** (y Git para descargar y actualizar el
+código): Python, el servidor y, si se quiere, el HTTPS van dentro de contenedores. Todos los
+comandos son para una terminal del servidor (por SSH) con un usuario que pueda usar `sudo`.
 
 ### 0. Preguntas para TI de Yachay (antes de empezar)
 
@@ -35,11 +35,11 @@ tal cual en un correo:
 
 **El servidor**
 
-1. ¿Qué sistema operativo tiene (Ubuntu, Debian, Rocky, Windows Server…)? ¿Tendremos acceso de
-   administrador (`sudo`) o lo instalan ustedes?
+1. ¿Qué versión de Ubuntu tiene (`lsb_release -a`)? ¿Tendremos acceso por **SSH con `sudo`**
+   o lo instalan ustedes?
 2. ¿Se puede instalar **Docker** con el plugin `docker compose`? ¿Ya lo tiene?
 3. ¿El servidor ya publica **otras webs**? Si es así, ¿con qué servidor web (nginx, Apache,
-   IIS, Caddy…) y quién lo administra? Entonces los puertos 80 y 443 ya están ocupados y lo
+   Caddy…) y quién lo administra? Entonces los puertos 80 y 443 ya están ocupados y lo
    nuestro se añade como un sitio más.
 4. ¿Cuánto disco libre hay y se hacen **copias de seguridad** del servidor? (Los datos de CODEA 2
    ocupan poco: unos MB por cientos de sesiones.)
@@ -68,59 +68,49 @@ tal cual en un correo:
 
 ### 1. Instalar Docker
 
-**Linux** (Ubuntu o Debian; para otras distribuciones, <https://docs.docker.com/engine/install/>):
+Primero, ver si ya está: si `docker compose version` responde, saltar al paso 2. Si no, desde el
+repositorio oficial de Docker (<https://docs.docker.com/engine/install/ubuntu/>):
 
 ```bash
-curl -fsSL https://get.docker.com | sudo sh    # Docker Engine y el plugin compose
-sudo systemctl enable --now docker             # arranca con el servidor
-sudo usermod -aG docker $USER                  # usar docker sin sudo (cerrar sesión y volver a entrar)
-docker compose version
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl git
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+sudo systemctl enable --now docker      # arranca con el servidor
+sudo usermod -aG docker $USER           # usar docker sin sudo: cerrar la sesión SSH y volver a entrar
+docker compose version                  # Docker Compose version v2.x
 ```
+
+Si el servidor ya tenía el `docker.io` de Ubuntu pero sin `docker compose`, basta con
+`sudo apt-get install -y docker-compose-v2` en vez de lo anterior.
 
 Docker arranca solo con el servidor y el contenedor (`restart: unless-stopped`) también: tras
 un reinicio no hay que hacer nada.
 
-**Windows** (10/11): **Docker Desktop** desde <https://www.docker.com/products/docker-desktop/>,
-con *Use WSL 2*. Necesita la virtualización activada en la BIOS (Administrador de tareas →
-Rendimiento → CPU: *Virtualización: Habilitado*); si pide WSL, `wsl --install` como
-administrador y reiniciar. Docker Desktop **solo arranca cuando alguien inicia sesión**, así que:
-
-- Docker Desktop → *Settings* → *General*: marcar **Start Docker Desktop when you sign in**.
-- Inicio de sesión automático: Configuración → Cuentas → Opciones de inicio de sesión →
-  desactivar *permitir solo el inicio de sesión de Windows Hello*; luego `Win + R` → `netplwiz`
-  → desmarcar *Los usuarios deben escribir su nombre de usuario y contraseña*.
-- Que no se suspenda (PowerShell como administrador):
-  `powercfg /change standby-timeout-ac 0` y `powercfg /change hibernate-timeout-ac 0`.
-
-> Docker Desktop no está soportado oficialmente en Windows Server, y es gratuito para uso
-> educativo y organizaciones pequeñas; si la universidad lo usa a gran escala, que TI confirme la
-> licencia. En un servidor, Linux da menos guerra.
-
 ### 2. Descargar el código
 
 ```bash
-# Linux
 sudo mkdir -p /opt/codea2 && sudo chown $USER /opt/codea2
 cd /opt/codea2
 git clone https://github.com/clousck/Codea2Server.git
 cd Codea2Server
 ```
 
-```powershell
-# Windows (Git desde https://git-scm.com/download/win)
-mkdir C:\CODEA2; cd C:\CODEA2
-git clone https://github.com/clousck/Codea2Server.git
-cd Codea2Server
-```
-
-Si el repositorio es privado, Git pedirá iniciar sesión en GitHub con una cuenta que tenga
-acceso. En Windows, mejor una ruta fuera de OneDrive (puede bloquear archivos de `uploads/`).
+Si el repositorio es privado, Git pedirá usuario y un *token* de GitHub (no la contraseña) de
+una cuenta con acceso.
 
 ### 3. Configurar
 
 ```bash
-cp .env.example .env        # Windows: copy .env.example .env
-nano .env                   # Windows: notepad .env
+cp .env.example .env
+nano .env                   # guardar: Ctrl+O, Enter; salir: Ctrl+X
 ```
 
 Lo mínimo:
@@ -140,7 +130,7 @@ En la carpeta del repositorio:
 ```bash
 docker compose up -d --build
 docker ps                                       # json-uploader: Up … (healthy) al cabo de un minuto
-curl http://localhost:26332/health              # {"status":"alive"}   (Windows: curl.exe)
+curl http://localhost:26332/health              # {"status":"alive"}
 ```
 
 Registros: `docker logs -f json-uploader`.
@@ -149,7 +139,7 @@ Registros: `docker logs -f json-uploader`.
 
 Elegir **una** opción según lo que haya respondido TI.
 
-#### Opción A — El servidor ya tiene un servidor web (nginx, Apache, IIS…) en el 80/443
+#### Opción A — El servidor ya tiene nginx o Apache en el 80/443
 
 Lo más probable si el servidor «sirve para todo». CODEA 2 se añade como un sitio más, que
 reenvía a `http://127.0.0.1:26332`. En el `.env`:
@@ -158,14 +148,14 @@ reenvía a `http://127.0.0.1:26332`. En el `.env`:
 CODEA2_BIND=127.0.0.1      # el 26332 solo se ve desde el propio servidor: se entra por el servidor web
 ```
 
-`docker compose up -d` para aplicarlo. Con nginx, el sitio queda así (con Apache o IIS es
-equivalente; el certificado, el que ya usen):
+`docker compose up -d` para aplicarlo.
+
+**Con nginx**, en `/etc/nginx/sites-available/codea2` (`sudo nano …`):
 
 ```nginx
 server {
-    listen 443 ssl;
+    listen 80;
     server_name codea2.yachaytech.edu.ec;
-    # ssl_certificate / ssl_certificate_key: los de la universidad, o los de certbot
     client_max_body_size 20m;
     proxy_read_timeout 120s;
     location / {
@@ -175,19 +165,44 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
-server {
-    listen 80;
-    server_name codea2.yachaytech.edu.ec;
-    return 301 https://$host$request_uri;
-}
 ```
 
-`sudo nginx -t && sudo systemctl reload nginx`. Sin certificado de la universidad, `certbot
---nginx -d codea2.yachaytech.edu.ec` lo saca de Let's Encrypt y lo renueva solo.
+```bash
+sudo ln -s /etc/nginx/sites-available/codea2 /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+# HTTPS: si la universidad no da certificado, Let's Encrypt (lo renueva solo)
+sudo apt-get install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d codea2.yachaytech.edu.ec      # añade el 443 y redirige el 80 al 443
+```
+
+Si TI pone su propio certificado, el bloque pasa a `listen 443 ssl;` con sus `ssl_certificate`
+y `ssl_certificate_key`.
+
+**Con Apache**, en `/etc/apache2/sites-available/codea2.conf`:
+
+```apache
+<VirtualHost *:80>
+    ServerName codea2.yachaytech.edu.ec
+    ProxyPreserveHost On
+    ProxyTimeout 120
+    LimitRequestBody 20971520
+    RequestHeader set X-Forwarded-Proto expr=%{REQUEST_SCHEME}
+    ProxyPass        / http://127.0.0.1:26332/
+    ProxyPassReverse / http://127.0.0.1:26332/
+</VirtualHost>
+```
+
+```bash
+sudo a2enmod proxy proxy_http headers
+sudo a2ensite codea2 && sudo apache2ctl configtest && sudo systemctl reload apache2
+sudo apt-get install -y certbot python3-certbot-apache
+sudo certbot --apache -d codea2.yachaytech.edu.ec
+```
 
 #### Opción B — Los puertos 80 y 443 están libres: HTTPS con Caddy en Docker
 
-Si en el servidor no hay otro servidor web, Caddy (otro contenedor, `docker-compose.https.yml`)
+Si en el servidor no hay otro servidor web (`sudo ss -ltnp | grep -E ':(80|443) '` no muestra
+nada), Caddy (otro contenedor, `docker-compose.https.yml`)
 atiende el 80 y el 443 y saca y renueva solo el certificado de Let's Encrypt. Hace falta el
 dominio apuntando a la IP pública. En el `.env`:
 
@@ -226,27 +241,26 @@ paso mientras llega el dominio.
 | C | 26332 (TCP) |
 
 ```bash
-sudo ufw allow 80,443/tcp          # Linux con ufw (opción C: sudo ufw allow 26332/tcp)
+sudo ufw status                     # si dice "inactive", no hace falta nada más
+sudo ufw allow 80,443/tcp           # opción C: sudo ufw allow 26332/tcp
 ```
 
-```powershell
-New-NetFirewallRule -DisplayName "CODEA2" -Direction Inbound -Protocol TCP -LocalPort 80,443 -Action Allow   # Windows (C: -LocalPort 26332)
-```
-
-> En Linux, **los puertos que publica Docker se saltan `ufw`**: un `ufw deny 26332` no lo cierra.
-> Para que el 26332 no se vea desde fuera está `CODEA2_BIND=127.0.0.1`.
+> **Antes de activar `ufw`** (si estaba inactivo), `sudo ufw allow OpenSSH`: si no, se corta la
+> conexión SSH y se pierde el acceso al servidor.
+>
+> **Los puertos que publica Docker se saltan `ufw`**: un `ufw deny 26332` no lo cierra. Para que
+> el 26332 no se vea desde fuera está `CODEA2_BIND=127.0.0.1`.
 
 ### Comprobar con /health, tramo a tramo
 
 `/health` responde `{"status":"alive"}` sin contraseña y sin tocar los datos. Probarlo desde
 cada punto del camino dice **dónde** se corta si algo falla. Ir en orden y no pasar al siguiente
-hasta que el anterior responda. En Windows se escribe `curl.exe` (en PowerShell 5, `curl` a
-secas es otra cosa); en Linux o macOS, `curl`.
+hasta que el anterior responda. Desde un PC con Windows, `curl.exe` en vez de `curl`.
 
 | # | Desde | Comando | Si falla, el problema está en… |
 |---|---|---|---|
 | 1 | El servidor | `curl http://localhost:26332/health` | Docker: `docker ps`, `docker logs json-uploader` |
-| 2 | El servidor, por su nombre público | A y B: `curl --resolve DOMINIO:443:127.0.0.1 https://DOMINIO/health` | El sitio de nginx/Apache/IIS (A) o Caddy (B): `docker logs codea2-caddy` |
+| 2 | El servidor, por su nombre público | A y B: `curl --resolve DOMINIO:443:127.0.0.1 https://DOMINIO/health` | El sitio de nginx/Apache (A: `sudo tail /var/log/nginx/error.log`) o Caddy (B: `docker logs codea2-caddy`) |
 | 3 | Internet (un móvil con datos, sin wifi) | A y B: `https://DOMINIO/health` · C: `http://IP-PÚBLICA:26332/health` | El DNS, el firewall del servidor o el de la universidad |
 | 4 | La wifi de los visores | Lo mismo que el 3, en el navegador del Quest | La wifi: no deja salir, o no deja entrar a la IP pública desde dentro (pregunta 8) |
 
@@ -275,8 +289,9 @@ sesiones **y las fichas, notas y exclusiones**:
 
 1. En el panel de la Pi: *Archivos → Descargar todos* (`/exportar/originales.zip`). El ZIP
    lleva los JSON y `.codea2-panel.json`.
-2. Descomprimirlo **dentro** de la carpeta `uploads` del repositorio, reemplazando lo que haya
-   (Linux: `unzip -o codea2_json_originales.zip -d uploads`).
+2. Pasarlo al servidor (desde el PC: `scp codea2_json_originales.zip usuario@servidor:/opt/codea2/`)
+   y descomprimirlo **dentro** de `uploads`, reemplazando lo que haya:
+   `sudo apt-get install -y unzip && unzip -o /opt/codea2/codea2_json_originales.zip -d /opt/codea2/Codea2Server/uploads`
 3. `docker compose restart` (con los dos `-f` si es la opción B) y comprobar en *Sesiones*.
 
 Si las dos instalaciones reciben subidas a la vez durante un tiempo, se puede repetir: los JSON
@@ -298,7 +313,7 @@ siendo `UPLOAD_API_KEY`. Recompilar e instalar en los visores.
 ### 8. Actualizar y copias de seguridad
 
 ```bash
-cd /opt/codea2/Codea2Server        # Windows: cd C:\CODEA2\Codea2Server
+cd /opt/codea2/Codea2Server
 git pull
 docker compose up -d --build
 # opción B: docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
@@ -307,10 +322,6 @@ docker compose up -d --build
 Copia de seguridad: *Archivos → Descargar todos* desde el panel, o copiar la carpeta `uploads`
 entera (incluidos los archivos que empiezan por punto). Si TI hace copias del servidor, que
 incluyan esa carpeta.
-
-> Con Docker Desktop en Windows, la IP que se ve en los registros y en el bloqueo de contraseñas
-> es la interna de Docker, no la del cliente (en Linux, y en la opción A, sí se ve la real). En
-> ese caso, tras 8 contraseñas mal puestas el panel queda bloqueado 10 minutos **para todos**.
 
 ## Actualizar la Raspberry Pi
 
@@ -532,19 +543,15 @@ Dentro de `uploads/` el panel solo escribe eso y `.codea2-panel.json` (sesiones 
 - **El panel no acepta la contraseña:** sin `DASHBOARD_PASSWORD`, es la clave de subida. Tras
   8 intentos fallidos hay que esperar 10 minutos.
 - **Un error 500:** el motivo está en `docker logs -f json-uploader`.
-- **Windows: `docker` no se reconoce o no conecta** (`error during connect`, `pipe/docker_engine`):
-  Docker Desktop no está abierto o aún está arrancando. Si no arranca: virtualización desactivada
-  en la BIOS o WSL sin instalar (`wsl --install`, como administrador, y reiniciar).
-- **Windows: tras reiniciar el servidor no responde:** nadie ha iniciado sesión (Docker Desktop
-  no arranca sin sesión) o falta *Start Docker Desktop when you sign in*. Ver el
-  [paso 1](#1-instalar-docker).
-- **Linux: `permission denied` al usar `docker`:** falta cerrar sesión y volver a entrar tras el
+- **`permission denied` al usar `docker`:** falta cerrar sesión y volver a entrar tras el
   `usermod -aG docker`, o usar `sudo docker …`.
 - **Funciona en `localhost` pero no desde fuera:** seguir la tabla de
   [Comprobar con /health](#comprobar-con-health-tramo-a-tramo); el primer tramo que falla dice
   dónde está el problema.
 - **502 o 504 de nginx/Apache (opción A):** el servidor web no llega a `127.0.0.1:26332`: el
   contenedor está parado (`docker ps`) o el sitio apunta a otro puerto.
+- **413 al subir a mano desde el panel (opción A):** falta `client_max_body_size 20m` (nginx) o
+  `LimitRequestBody` (Apache) en el sitio.
 - **Opción B: el navegador avisa de certificado no válido:** Caddy aún no lo ha conseguido;
   `docker logs codea2-caddy` dice por qué (casi siempre, el 80 o el 443 no llegan desde fuera).
 - **Volver a la versión anterior** (solo subida, puerto 8090):
