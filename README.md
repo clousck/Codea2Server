@@ -116,7 +116,7 @@ nano .env                   # guardar: Ctrl+O, Enter; salir: Ctrl+X
 Lo mínimo:
 
 ```ini
-UPLOAD_API_KEY=CodeaVR2YachayTech2026     # la que lleva el APK (JSONUploader.cs); si se cambia, recompilar el APK
+UPLOAD_API_KEY=LA-CLAVE-DEL-APK          # la que lleva el APK (JSONUploader.cs); si se cambia, recompilar el APK
 DASHBOARD_PASSWORD=una-contraseña-larga    # la del panel; sin ella, el panel se abre con la clave del APK
 ```
 
