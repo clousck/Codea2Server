@@ -1,0 +1,28 @@
+# Añade HTTPS con Caddy, para un servidor con IP pública y sin túnel de Cloudflare.
+# Se usa junto al docker-compose.yml normal:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+#
+# Necesita en .env CODEA2_DOMINIO (el dominio que apunta a la IP pública) y que los puertos
+# 80 y 443 de esa IP lleguen a esta máquina. Ver «Instalar en un servidor nuevo» en el README.
+services:
+  caddy:
+    image: caddy:2
+    container_name: codea2-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CODEA2_DOMINIO=${CODEA2_DOMINIO:?Falta CODEA2_DOMINIO en .env}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Los certificados: si se pierden, Caddy los vuelve a pedir (Let's Encrypt limita cuántos)
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - json-uploader
+
+volumes:
+  caddy_data:
+  caddy_config:

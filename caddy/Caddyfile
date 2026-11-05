@@ -1,0 +1,10 @@
+# HTTPS delante del servidor cuando no hay túnel de Cloudflare (ver docker-compose.https.yml).
+# Caddy pide y renueva solo el certificado de Let's Encrypt para el dominio de CODEA2_DOMINIO;
+# para eso los puertos 80 y 443 de la IP pública tienen que llegar a esta máquina.
+{$CODEA2_DOMINIO} {
+	# Los JSON del visor pesan poco, pero la subida a mano desde el panel admite hasta 16 MB
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy json-uploader:8080
+}

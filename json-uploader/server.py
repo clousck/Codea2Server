@@ -524,6 +524,12 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=port)
     else:
         log.info("CODEA 2 escuchando en el puerto %s · subidas en %s", port, UPLOAD_DIR)
-        # El túnel de Cloudflare llega por HTTP y dice en cabeceras quién pidió qué y si fue por HTTPS
-        serve(app, host='0.0.0.0', port=port, threads=8, trusted_proxy="*",
-              trusted_proxy_headers="x-forwarded-for x-forwarded-proto x-forwarded-host")
+        # Un proxy delante (el túnel de Cloudflare, Caddy) llega por HTTP y dice en cabeceras quién
+        # pidió qué y si fue por HTTPS. Expuesto sin proxy, esas cabeceras las inventa el cliente
+        # (y con ellas se saltaría el bloqueo de contraseñas): TRUSTED_PROXY=no las ignora.
+        trusted = os.environ.get("TRUSTED_PROXY", "*").strip()
+        if trusted.lower() in ("", "0", "no", "ninguno"):
+            serve(app, host='0.0.0.0', port=port, threads=8)
+        else:
+            serve(app, host='0.0.0.0', port=port, threads=8, trusted_proxy=trusted,
+                  trusted_proxy_headers="x-forwarded-for x-forwarded-proto x-forwarded-host")
