@@ -262,9 +262,6 @@
         <label title="Con «interrupción técnica», los escenarios sin terminar no cuentan en el logro final">Motivo de cierre
           <select name="closure"><option value="">Sin indicar</option>{% for value, label in sheet.CLOSURES.items() %}<option value="{{ value }}"{% if closure == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
         </label>
-        <label>Versión del juego
-          <input type="text" name="gameVersion" value="{{ run.sheet.gameVersion }}" maxlength="80">
-        </label>
       </div>
 
       <p class="sub">Perfil de evidencias de cada actividad (E1P a E4P). Cada criterio: <strong>1</strong> si se evidencia, <strong>0</strong> si hubo oportunidad suficiente y no, <strong>NO</strong> si no hubo oportunidad o evidencia. Recoger el plan y la predicción antes de ejecutar; no sustituir después el primer resultado por la mejor respuesta. Anotar la ayuda y el momento en la evidencia.</p>

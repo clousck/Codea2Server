@@ -496,7 +496,6 @@ def analysis_table(runs):
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
         Column("closure", "text", "Motivo de cierre, de la ficha"),
-        Column("gameVersion", "text", "Versión del juego, de la ficha"),
         Column("scenario", "int", "Número de escenario (1 a 4)"),
         Column("scenarioName", "text", "Nombre del escenario en el documento de métricas"),
         Column("G", "flag", "MC1 · Logro final: 1 completado, 0 no completado. Vacío si no es evaluable"),
@@ -592,7 +591,6 @@ def pillars_table(runs):
         Column("observer", "text", "Nombre del supervisor en la lista de Personas"),
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
-        Column("gameVersion", "text", "Versión del juego, de la ficha"),
         Column("scenario", "int", "Número de escenario (1 a 4)"),
         Column("profile", "text", "Perfil del documento: E1P, E2P, E3P o E4P"),
         Column("dimension", "text", "D descomposición, TD toma de decisiones, PA pensamiento algorítmico, "

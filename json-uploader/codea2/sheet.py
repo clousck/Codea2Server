@@ -110,9 +110,7 @@ MATRIX = {
 DEFAULTS = {"moment": "final", "help": "ninguna", "closure": "completada"}
 
 _CHOICES = {"moment": MOMENTS, "help": HELP, "closure": CLOSURES}
-_TEXTS = ("gameVersion",)
-SESSION_FIELDS = ("participant", "participantId", "supervisor", "observer", "moment", "help", "closure",
-                  "gameVersion")
+SESSION_FIELDS = ("participant", "participantId", "supervisor", "observer", "moment", "help", "closure")
 
 
 def supervisor_code(pin):
@@ -167,9 +165,6 @@ def from_form(form, participant_ids=()):
     for key, choices in _CHOICES.items():
         if key in form:
             fields[key] = form[key] if form[key] in choices else ""
-    for key in _TEXTS:
-        if key in form:
-            fields[key] = form[key].strip()[:80]
     for scenario in MATRIX:
         for pillar in PILLARS:
             for number in (1, 2):

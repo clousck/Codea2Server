@@ -195,7 +195,6 @@ _SESSION_TAIL = (
     Column("moment", "text", "Ficha · Momento de evaluación: inicial o final"),
     Column("help", "text", "Ficha · Ayuda recibida: ninguna, verbal o directa"),
     Column("closure", "text", "Ficha · Motivo de cierre: completada, tiempo, abandono o tecnica"),
-    Column("gameVersion", "text", "Ficha · Versión del juego"),
     Column("uploadedLocal", "local", "Fecha del archivo en el servidor (última subida), en hora local"),
 )
 

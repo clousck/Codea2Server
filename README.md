@@ -435,8 +435,8 @@ Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las regl
 ### La ficha de sesión
 
 Lo que el estudio necesita y el visor no sabe. Se rellena en la página de cada sesión: el
-participante, el momento (inicial o final), la ayuda recibida, el motivo de cierre, la versión del
-juego y, por cada escenario, los dos criterios de cada dimensión (1, 0 o NO) con su evidencia,
+participante, el momento (inicial o final), la ayuda recibida, el motivo de cierre y, por cada
+escenario, los dos criterios de cada dimensión (1, 0 o NO) con su evidencia,
 según las matrices del documento. Se guarda en `uploads/.codea2-panel.json`, junto con las listas
 de *Personas*, y sale en las tablas `sesiones`, `analisis` y `pilares`.
 

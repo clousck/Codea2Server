@@ -481,15 +481,16 @@ class MetricsTest(ServerCase):
         self.client.post("/personas/supervisores", data={"csrf": self.csrf(), "code": "01", "name": "Mateo"})
         self.client.post("/personas/participantes", data={"csrf": self.csrf(), "name": "Ana Pérez"})
         response = self.post_sheet("0101_5_00000", participantId="1", moment="final", help="verbal",
-                                   closure="completada", gameVersion="1.4",
+                                   closure="completada", gameVersion="1.4",  # ya no existe: se ignora
                                    e2_patrones_1="1", e2_patrones_2="0", e2_decisiones_1="1", e2_decisiones_2="NO",
                                    e2_decisiones_1_ev="«el agua enfría»", note="tranquilo")
         self.assertEqual(response.status_code, 302)
         row = self.rows("sesiones")[0]
         # Código de participante = PIN; supervisor = sus dos primeras cifras, con su nombre de la lista
         self.assertEqual((row["participant"], row["participantId"], row["supervisor"], row["observer"], row["moment"],
-                          row["help"], row["closure"], row["gameVersion"], row["note"]),
-                         ("0101", "1", "01", "Mateo", "final", "verbal", "completada", "1.4", "tranquilo"))
+                          row["help"], row["closure"], row["note"]),
+                         ("0101", "1", "01", "Mateo", "final", "verbal", "completada", "tranquilo"))
+        self.assertNotIn("gameVersion", row)
         # El nombre del niño no sale en las descargas
         self.assertNotIn("Ana Pérez", self.client.get("/exportar/sesiones.csv").get_data(as_text=True))
         # E2P: solo hay porcentaje con los dos criterios evaluados; un NO deja NC, no un cero
