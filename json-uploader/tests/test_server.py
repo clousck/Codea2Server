@@ -583,6 +583,20 @@ class MetricsTest(ServerCase):
         self.put("0007_42_3F9A1.json", (CURRENT / "0007_42_3F9A1.json").read_bytes())
         self.assertEqual(server.dataset.get("0007_42_3F9A1").scenarios[1].level, "2026-10")
 
+    def test_a_pause_does_not_invalidate_the_time(self):
+        data = json.loads(sample("0004_3_615DD.json").decode("utf-8-sig"))
+        data["escenario2"]["totalSeconds"] -= 30          # 30 s de pausa: el reloj va por delante
+        data["escenario3"]["totalSeconds"] += 30          # el cronómetro por delante del reloj
+        self.put("0004_3_615DD.json", json.dumps(data).encode())
+        codes = {(i.scenario, i.code) for i in server.dataset.get("0004_3_615DD").issues}
+        self.assertTrue({(2, "pausa"), (3, "tiempo_distinto")} <= codes, codes)
+        self.assertNotIn((2, "tiempo_distinto"), codes)
+        rows = self.analysis("?dif=2")
+        e2, e3 = rows[("0004_3_615DD.json", "2")], rows[("0004_3_615DD.json", "3")]
+        self.assertEqual((e2["totalSeconds"], e2["time_excluded"]), ("34.931", ""))
+        self.assertEqual(e3["totalSeconds"], "")
+        self.assertIn("totalSeconds supera al reloj", e3["time_excluded"])
+
     def test_level_without_a_solved_attempt_goes_by_date(self):
         from datetime import datetime, timezone
         from codea2.solutions import level_for

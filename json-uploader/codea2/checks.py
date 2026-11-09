@@ -110,9 +110,17 @@ def _check_scenario(run, number, scenario, add):
             add("evento_despues", f"{late} evento(s) con hora posterior al fin del escenario.", number)
 
     clock, total = scenario.clock_seconds, scenario.total_seconds
-    if scenario.completed and clock is not None and total is not None and abs(clock - total) > _CLOCK_TOLERANCE:
-        add("tiempo_distinto", f"totalSeconds ({total:.1f} s) y el reloj entre startedUtc y endedUtc "
-                               f"({clock:.1f} s) difieren en {abs(clock - total):.1f} s.", number)
+    if scenario.completed and clock is not None and total is not None:
+        if clock - total > _CLOCK_TOLERANCE:
+            # El cronómetro del juego se para con el visor en pausa: totalSeconds es el tiempo de
+            # juego y sigue valiendo para MC2. Se avisa solo para que conste
+            add("pausa", f"El visor estuvo en pausa {clock - total:.1f} s (reloj {clock:.1f} s, "
+                         f"cronómetro {total:.1f} s). El cronómetro ya no cuenta la pausa: el tiempo vale "
+                         "para MC2.", number)
+        elif total - clock > _CLOCK_TOLERANCE:
+            add("tiempo_distinto", f"totalSeconds ({total:.1f} s) supera en {total - clock:.1f} s al reloj "
+                                   f"entre startedUtc y endedUtc ({clock:.1f} s): el cronómetro contó tiempo "
+                                   "que no pasó.", number)
 
     _check_counters(scenario, number, events, add)
     _check_doubles(scenario, number, add)

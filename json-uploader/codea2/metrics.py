@@ -36,7 +36,7 @@ TITLES = {
 _TIME_ISSUES = {
     "evento_antes": "hay un evento anterior al inicio del reto",
     "evento_despues": "hay un evento posterior al fin del reto",
-    "tiempo_distinto": "totalSeconds no coincide con el reloj",
+    "tiempo_distinto": "totalSeconds supera al reloj",
 }
 
 # El escenario 2 tiene siempre los mismos tres módulos

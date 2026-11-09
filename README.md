@@ -398,7 +398,8 @@ Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las regl
   Una sala que agota sus 5 minutos (`timedOut`, desde el 12/10/2026) es un resultado final:
   cuenta como no completada, y la tarjeta dice cuántas hubo.
 - **MC2** solo usa el tiempo de escenarios completados cuyo cronómetro no tiene avisos
-  (`evento_antes`, `evento_despues`, `tiempo_distinto`).
+  (`evento_antes`, `evento_despues`, `tiempo_distinto`). Una pausa del visor (`pausa`) no lo
+  invalida: el cronómetro del juego se para con ella y `totalSeconds` es el tiempo de juego.
 - Los porcentajes son el promedio de los porcentajes de cada sesión; el global (suma de F entre
   suma de N) se muestra al lado.
 - En el escenario 3 no hay tasa de fallos: `solved = false` es una pasada intermedia.
@@ -502,7 +503,8 @@ mal capturado, sesión por sesión. Son avisos, no errores: un cero puede ser le
 | `pin_repetido` | Mismo PIN, contador y visor que otro archivo, pero otra hora de inicio |
 | `sin_cierre` | La run no se cerró (`endedUtc` vacío) |
 | `evento_antes` | Un evento anterior al inicio de su escenario: el reto se abrió tarde y `totalSeconds` se queda corto |
-| `tiempo_distinto` | `totalSeconds` y el reloj difieren en más de 2 s |
+| `pausa` | El reloj del escenario supera a `totalSeconds` en más de 2 s: el visor estuvo en pausa. Solo informa: el tiempo sigue valiendo para MC2 |
+| `tiempo_distinto` | `totalSeconds` supera al reloj en más de 2 s: el cronómetro contó tiempo que no pasó. El tiempo queda fuera de MC2 |
 | `sin_tipo` | Intento del escenario 3 sin `itemType` |
 | `agotado_y_completado` | Un escenario figura a la vez como completado y con el tiempo agotado |
 | `contador` | Un contador no coincide con lo que hay en su lista |
