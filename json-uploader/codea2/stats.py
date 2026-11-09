@@ -472,7 +472,7 @@ def scenario_detail(scenario):
             "repetitions": as_int(event.get("repetitions")),
             "remaining": remaining(event),
             "percent": solution_percent(event),
-            "key": compare(event.get("sequence"), scenario.difficulty) if scenario.number == 1 else None,
+            "key": compare(event.get("sequence"), scenario.difficulty, scenario.level) if scenario.number == 1 else None,
         })
     return rows
 

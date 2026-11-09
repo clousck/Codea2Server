@@ -412,9 +412,12 @@ Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las regl
 - **E1I · Número y orden de instrucciones** compara cada secuencia del escenario 1 con la solución
   de su dificultad: instrucciones que faltan y que sobran (sin mirar el orden) y, de las que
   coinciden, cuántas están en el orden de la solución. Vale también para los JSON anteriores al
-  22/10/2026. La clave copia `CodeaSolutions` de Unity y está en `codea2/solutions.py`: **si
-  cambian los niveles del escenario 1, hay que actualizarla**. El aviso `clave_distinta` salta
-  cuando el `solutionPercent` del visor no coincide con el de la clave. E1S usa también la cuenta
+  22/10/2026. La clave copia `CodeaSolutions` de Unity y está en `codea2/solutions.py`, con una
+  versión por cada cambio de niveles: la de octubre y la de los niveles nuevos, vistos el
+  09/11/2026. Cada sesión se compara con la suya: la reconoce el intento que resolvió el
+  escenario 1 y, si no hubo ninguno, la fecha. **Si vuelven a cambiar los niveles, hay que añadir
+  la versión nueva** (no sustituir la anterior). El aviso `clave_distinta` salta cuando el
+  `solutionPercent` del visor no coincide con el de la clave. E1S usa también la cuenta
   del panel y no la del visor, que el 22/10/2026 tomaba «Avanzar» como «Avanzar 2».
 - La duración de una sesión es su `totalSeconds`, que no cuenta el visor parado; el aviso
   `visor_parado` dice cuándo el reloj se fue más de un minuto por encima. Dos eventos idénticos
@@ -585,6 +588,6 @@ json-uploader/
   templates/, static/     el panel (sin dependencias externas ni CDN)
   tests/                  pruebas
 JSON Samples/             sesiones de ejemplo con el formato actual; las usan las pruebas
-                          (las del formato anterior están en json-uploader/tests/fixtures/)
+                          (las del formato anterior y las de los niveles nuevos, en json-uploader/tests/fixtures/)
 uploads/                  los JSON subidos (volumen del contenedor)
 ```

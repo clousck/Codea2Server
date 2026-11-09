@@ -122,7 +122,7 @@ def scenario_metrics(run, number):
         row["K"] = _first(solved)
         # Contexto, no métrica del documento: lo cerca que quedó el primer intento de la solución.
         # En el escenario 1 se usa la cuenta del panel sobre la clave: la del visor falló (22/10/2026)
-        percent = (lambda e: _key_percent(e, run.difficulty)) if number == 1 else solution_percent
+        percent = (lambda e: _key_percent(e, scenario)) if number == 1 else solution_percent
         row["S1"] = next((v for v in (percent(e) for e in events if _outcome(e, "solved") is not None)), None)
         if number == 1:
             # E1S: cercanía de los intentos que no resolvieron (el que resuelve vale 100)
@@ -132,7 +132,7 @@ def scenario_metrics(run, number):
             row["Smean"] = sum(failed) / len(failed) if failed else None
             row["Sbest"] = max(failed) if failed else None
             # E1I: número y orden de instrucciones frente a la clave de soluciones
-            keyed = [(compare(e.get("sequence"), run.difficulty), _outcome(e, "solved")) for e in events]
+            keyed = [(compare(e.get("sequence"), scenario.difficulty, scenario.level), _outcome(e, "solved")) for e in events]
             keyed = [(k, ok) for k, ok in keyed if k is not None and ok is not None]
             if keyed:
                 first = keyed[0][0]
@@ -165,9 +165,9 @@ def scenario_metrics(run, number):
     return row
 
 
-def _key_percent(event, difficulty):
+def _key_percent(event, scenario):
     """La cuenta de solutionPercent con la clave del panel; sin clave, la del visor."""
-    key = compare(event.get("sequence"), difficulty)
+    key = compare(event.get("sequence"), scenario.difficulty, scenario.level)
     return key["percent"] if key else solution_percent(event)
 
 

@@ -381,7 +381,7 @@ def attempts_table(runs):
             "timestamp": event.get("timestamp"),
             "secondsFromScenarioStart": scenario.offset(event),
         })
-        key = compare(event.get("sequence"), run.difficulty) if scenario.number == 1 else None
+        key = compare(event.get("sequence"), run.difficulty, scenario.level) if scenario.number == 1 else None
         if key:
             row.update({name: key[name] for name in ("solutionLength", "missing", "extra", "inOrder", "orderPct")},
                        keyPercent=key["percent"])

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from .solutions import level_for
 from .store import StoredFile
 
 
@@ -180,6 +181,7 @@ class Scenario:
     timed_out: bool = False  # la sala agotó sus 5 minutos y la historia siguió (desde el 12/10/2026)
     tries: tuple = ()  # los Probar del escenario 2; vacío en los demás y en los JSON anteriores al 22/10/2026
     difficulty: int | None = None  # la de la sesión: hace falta para comparar con la clave de soluciones
+    level: str | None = None  # versión de los niveles con que se jugó (solutions.level_for)
 
     @property
     def number(self):
@@ -294,6 +296,11 @@ class Run:
 def build_run(file):
     data = file.data
     scenarios = {}
+    first = data.get("escenario1")
+    first = first.get("attempts") if isinstance(first, dict) else None
+    level = level_for(as_int(data.get("difficulty")),
+                      [e for e in first if isinstance(e, dict)] if isinstance(first, list) else [],
+                      parse_utc(data.get("startedUtc")))
     for meta in SCENARIOS.values():
         raw = data.get(meta.key)
         present = isinstance(raw, dict)
@@ -313,6 +320,7 @@ def build_run(file):
             timed_out=as_flag(raw.get("timedOut")),
             tries=tuple(e for e in tries if isinstance(e, dict)) if isinstance(tries, list) else (),
             difficulty=as_int(data.get("difficulty")),
+            level=level,
         )
     pin = data.get("pin")
     return Run(

@@ -564,6 +564,36 @@ class MetricsTest(ServerCase):
         for path in ("/?dif=1", "/escenarios?dif=1", "/sesiones/0103_3_68793", "/sesiones"):
             self.assertEqual(self.status(path), 200, path)
 
+    def test_levels_of_9_november(self):
+        # Pruebas reales con los niveles nuevos del escenario 1: la clave de 2026-11 cuadra con el visor
+        for name in ("0004_3_615DD.json", "1242_19_615DD.json"):
+            self.put(name, sample(name))
+        for run_id in ("0004_3_615DD", "1242_19_615DD"):
+            run = server.dataset.get(run_id)
+            self.assertEqual(run.scenarios[1].level, "2026-11")
+            self.assertNotIn("clave_distinta", {i.code for i in run.issues}, run_id)
+        e1 = self.analysis("?dif=2")[("0004_3_615DD.json", "1")]
+        self.assertEqual((e1["firstSolutionPercent"], e1["bestFailedSolutionPercent"]), ("54.545", "54.545"))
+        keyed = [a["keyPercent"] for a in self.rows("intentos", "?dif=1")
+                 if a["scenario"] == "1" and a["file"] == "1242_19_615DD.json"]
+        self.assertEqual(keyed, ["0", "25", "100"])
+        # El clic en Ejecutar antes de abrirse el reto se avisa y deja el tiempo fuera de MC2
+        self.assertIn("evento_antes", {i.code for i in server.dataset.get("1242_19_615DD").issues})
+        # Las sesiones de octubre siguen comparándose con su clave
+        self.put("0007_42_3F9A1.json", (CURRENT / "0007_42_3F9A1.json").read_bytes())
+        self.assertEqual(server.dataset.get("0007_42_3F9A1").scenarios[1].level, "2026-10")
+
+    def test_level_without_a_solved_attempt_goes_by_date(self):
+        from datetime import datetime, timezone
+        from codea2.solutions import level_for
+        failed = [{"sequence": ["Avanzar"], "solved": False}]
+        self.assertEqual(level_for(1, failed, datetime(2026, 10, 20, tzinfo=timezone.utc)), "2026-10")
+        self.assertEqual(level_for(1, failed, datetime(2026, 11, 9, 9, tzinfo=timezone.utc)), "2026-11")
+        # Un intento resuelto manda sobre la fecha
+        old = [{"sequence": ["Avanzar", "Girar Derecha", "Avanzar 2", "Girar Derecha", "Avanzar 2",
+                             "Girar Izquierda", "Avanzar", "Usar"], "solved": True}]
+        self.assertEqual(level_for(1, old, datetime(2026, 11, 20, tzinfo=timezone.utc)), "2026-10")
+
 
 if __name__ == "__main__":
     unittest.main()

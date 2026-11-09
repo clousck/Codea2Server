@@ -177,14 +177,14 @@ def _check_counters(scenario, number, events, add):
         # El visor y el panel calculan lo mismo; si no coinciden, la clave del panel está desfasada
         differ = 0
         for event in events:
-            visor, key = solution_percent(event), compare(event.get("sequence"), scenario.difficulty)
+            visor, key = solution_percent(event), compare(event.get("sequence"), scenario.difficulty, scenario.level)
             if visor is not None and key is not None and abs(visor - key["percent"]) > 1:
                 differ += 1
         if differ:
             add("clave_distinta", f"En {differ} intento(s), el solutionPercent del visor no coincide con la cuenta "
                                   "del panel sobre la clave de soluciones. O el cálculo del visor falla (visto el "
-                                  "22/10/2026: trataba «Avanzar» como «Avanzar 2») o el nivel cambió y hay que "
-                                  "actualizar codea2/solutions.py. E1S usa la cuenta del panel.", number)
+                                  "22/10/2026: trataba «Avanzar» como «Avanzar 2») o los niveles cambiaron y hay que "
+                                  "añadir su versión en codea2/solutions.py. E1S usa la cuenta del panel.", number)
 
     if number == 3:
         untyped = sum(1 for e in events if not str(e.get("itemType") or "").strip())
