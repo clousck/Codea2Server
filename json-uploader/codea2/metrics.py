@@ -489,11 +489,13 @@ def analysis_table(runs):
 
     columns = (
         *KEYS,
-        Column("participant", "text", "Código de participante, de la ficha de sesión"),
+        Column("participant", "text", "Código de participante: el PIN"),
+        Column("participantId", "text", "Número del participante en la lista de Personas, de la ficha"),
+        Column("supervisor", "text", "Código del supervisor: los dos primeros dígitos del PIN"),
+        Column("observer", "text", "Nombre del supervisor en la lista de Personas"),
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
         Column("closure", "text", "Motivo de cierre, de la ficha"),
-        Column("observer", "text", "Quién observó, de la ficha"),
         Column("gameVersion", "text", "Versión del juego, de la ficha"),
         Column("scenario", "int", "Número de escenario (1 a 4)"),
         Column("scenarioName", "text", "Nombre del escenario en el documento de métricas"),
@@ -584,10 +586,12 @@ def pillars_table(runs):
 
     columns = (
         *KEYS,
-        Column("participant", "text", "Código de participante, de la ficha"),
+        Column("participant", "text", "Código de participante: el PIN"),
+        Column("participantId", "text", "Número del participante en la lista de Personas, de la ficha"),
+        Column("supervisor", "text", "Código del supervisor: los dos primeros dígitos del PIN"),
+        Column("observer", "text", "Nombre del supervisor en la lista de Personas"),
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
-        Column("observer", "text", "Quién observó, de la ficha"),
         Column("gameVersion", "text", "Versión del juego, de la ficha"),
         Column("scenario", "int", "Número de escenario (1 a 4)"),
         Column("profile", "text", "Perfil del documento: E1P, E2P, E3P o E4P"),
@@ -610,7 +614,7 @@ def pillars_table(runs):
             for key, (_, short, code, _, _) in ficha.PILLARS.items():
                 profile = ficha.profile(run.sheet, number, key)
                 row = _keys(run)
-                row.update({k: run.sheet.get(k, "") for k in ("participant", "moment", "help", "observer", "gameVersion")})
+                row.update({k: run.sheet.get(k, "") for k in ficha.SESSION_FIELDS if k != "closure"})
                 row.update({
                     "scenario": number, "profile": f"E{number}P", "dimension": short, "record": code,
                     "C1": profile["c1"], "C2": profile["c2"], "C": profile["C"], "E": profile["E"], "P": profile["P"],

@@ -380,6 +380,7 @@ sirve para subir y no para leer.
 | **Detalle de una sesión** | Sus métricas, línea de tiempo, cada intento (con su cercanía a la solución), selección, prueba y colocación con su hora, avisos de integridad, **ficha de sesión** y JSON original |
 | **Datos** | Las tablas, con vista previa, diccionario de columnas y descarga |
 | **Archivos** | Lo que hay en `uploads/` y su estado. Subida a mano de los JSON sacados del visor por cable |
+| **Personas** | Las listas de supervisores (código de dos cifras y nombre) y de participantes (nombre, con un número que se asigna solo). Solo con la sesión iniciada, también con el panel público |
 | **Exploración** | Lo que no es métrica del estudio pero ayuda a preparar preguntas: tiempos sesión a sesión, secuencias probadas, cercanía a la solución intento a intento, qué opción se marcó y cuántas pruebas hizo falta en cada módulo, ajuste del bucle, qué ficha se puso en cada hueco |
 
 Los filtros de arriba (fechas, dificultad, PIN) valen para todo lo que hay debajo **y para las
@@ -433,11 +434,24 @@ Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las regl
 
 ### La ficha de sesión
 
-Lo que el estudio necesita y el visor no sabe. Se rellena en la página de cada sesión: código
-de participante, momento (inicial o final), ayuda recibida, motivo de cierre, observador, versión
-del juego y, por cada escenario, los dos criterios de cada dimensión (1, 0 o NO) con su evidencia,
-según las matrices del documento. Se guarda en `uploads/.codea2-panel.json` y sale en las tablas
-`sesiones`, `analisis` y `pilares`. Las valoraciones de la ficha anterior (una por sesión, con
+Lo que el estudio necesita y el visor no sabe. Se rellena en la página de cada sesión: el
+participante, el momento (inicial o final), la ayuda recibida, el motivo de cierre, la versión del
+juego y, por cada escenario, los dos criterios de cada dimensión (1, 0 o NO) con su evidencia,
+según las matrices del documento. Se guarda en `uploads/.codea2-panel.json`, junto con las listas
+de *Personas*, y sale en las tablas `sesiones`, `analisis` y `pilares`.
+
+- **Nada se escribe a mano.** Con el PIN `0701`, el código de participante es el propio PIN y el
+  observador es el supervisor `07`, cuyo nombre sale de la lista de *Personas*. Si ese código no
+  está en la lista, la ficha ofrece añadirlo.
+- **El participante se elige de su lista.** Su número (`participantId`) es lo que une su sesión
+  inicial y su final. En las descargas va ese número, nunca el nombre: son datos de menores. Un
+  participante elegido en alguna ficha no se puede quitar de la lista, solo renombrar.
+- **Valores propuestos:** una ficha sin guardar propone *Final*, *Sin ayuda* y *Completó la
+  sesión*, pero no cuentan hasta que se pulsa **Guardar la ficha**. El motivo de cierre decide los
+  casos dudosos de MC1, así que una sesión que nadie ha revisado no se da por completada. Una vez
+  guardada, la ficha muestra lo guardado aunque sea *Sin indicar*.
+- Las fichas anteriores con participante u observador escritos a mano conservan ese texto, pero
+  ya no se usa: vale el PIN y, si el supervisor no está en la lista, el observador escrito. Las valoraciones de la ficha anterior (una por sesión, con
 abstracción) siguen guardadas pero no se usan: no se atribuyen a una actividad ni se convierten en
 toma de decisiones.
 

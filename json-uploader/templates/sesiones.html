@@ -71,7 +71,7 @@
           <td class="n" data-v="{{ run.issues|length }}">
             {% if run.issues %}<span class="status warn" title="{% for issue in run.issues %}{{ issue.message }}{{ ' ' if not loop.last }}{% endfor %}">{{ run.issues|length }}</span>{% else %}<span class="sub">0</span>{% endif %}
           </td>
-          <td class="sub"><span class="tag" data-excluded-tag{% if not run.excluded %} hidden{% endif %}>Excluida</span>{% if run.legacy %} <span class="tag" title="JSON anterior al 06/10/2026: no entra en el análisis">Formato anterior</span>{% endif %}{% if run.sheet.participant %} <span class="tag" title="Código de participante">{{ run.sheet.participant }}</span>{% endif %} {{ run.note }}</td>
+          <td class="sub"><span class="tag" data-excluded-tag{% if not run.excluded %} hidden{% endif %}>Excluida</span>{% if run.legacy %} <span class="tag" title="JSON anterior al 06/10/2026: no entra en el análisis">Formato anterior</span>{% endif %}{% if can_edit and run.sheet.participantName %} <span class="tag" title="Participante {{ run.sheet.participantId }}">{{ run.sheet.participantName }}</span>{% endif %} {{ run.note }}</td>
         </tr>
         {% endfor %}
       </tbody>

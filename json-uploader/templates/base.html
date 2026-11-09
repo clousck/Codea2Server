@@ -18,6 +18,7 @@
       <a href="{{ url_for(endpoint, **filters.query()) }}"{% if active == endpoint or (endpoint == 'resumen' and active == 'escenarios') %} aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
       {% endif %}
+      {% if can_edit %}<a href="{{ url_for('personas') }}"{% if active == 'personas' %} aria-current="page"{% endif %}>Personas</a>{% endif %}
     </nav>
     <div class="topbar-actions">
       <button class="btn ghost" type="button" data-theme-toggle aria-label="Cambiar entre tema claro y oscuro" title="Tema claro u oscuro">◐</button>

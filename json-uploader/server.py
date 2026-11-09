@@ -265,7 +265,7 @@ def sesion(run_id):
         abort(404, description="No hay ninguna sesión con ese nombre.")
     index = runs.index(run)
     return render_template(
-        "sesion.html", run=run, sheet=sheet,
+        "sesion.html", run=run, sheet=sheet, participants=store.participants() if session.get("auth") else [],
         measures={n: metrics.scenario_metrics(run, n) for n in run.scenarios},
         previous=runs[index - 1] if index else None,
         following=runs[index + 1] if index + 1 < len(runs) else None,
@@ -287,7 +287,7 @@ def sesion_estado(run_id):
     store.set_state(run.file.name,
                     excluded=excluded[-1] == "1" if excluded else None,
                     note=request.form.get("note"),
-                    **sheet.from_form(request.form))
+                    **sheet.from_form(request.form, [p["id"] for p in store.participants()]))
     if request.headers.get("X-Requested-With") == "fetch":
         return {"status": "ok"}
     target = request.form.get("next")
@@ -308,6 +308,93 @@ def datos():
     runs = scope["matching"] if scope["filters"].with_excluded else scope["runs"]
     return render_template("datos.html", **scope, tables=tables.build_tables(runs), preview=25,
                            cell=exports.plain)
+
+
+# ── Personas: supervisores y participantes ────────────────────────────────────
+
+def signed_in(view):
+    """Solo con contraseña, también con el panel público: aquí hay nombres de niños."""
+    @wraps(view)
+    def decorated(*args, **kwargs):
+        return view(*args, **kwargs) if session.get("auth") else _deny()
+    return decorated
+
+
+def _clean_name(value):
+    return " ".join(str(value or "").split())[:80]
+
+
+@app.route("/personas")
+@signed_in
+def personas():
+    supervisors, participants = store.supervisors(), store.participants()
+    runs = dataset.runs()
+    by_supervisor, by_participant = {}, {}
+    for run in runs:
+        by_supervisor[run.sheet["supervisor"]] = by_supervisor.get(run.sheet["supervisor"], 0) + 1
+        if run.sheet.get("participantId"):
+            by_participant[run.sheet["participantId"]] = by_participant.get(run.sheet["participantId"], 0) + 1
+    # Códigos que aparecen en los PIN y aún no tienen nombre
+    missing = sorted(code for code in by_supervisor if code and code not in supervisors)
+    return render_template("personas.html", supervisors=supervisors, participants=participants,
+                           by_supervisor=by_supervisor, by_participant=by_participant, missing=missing,
+                           suggested=request.args.get("codigo", ""))
+
+
+@app.route("/personas/supervisores", methods=["POST"])
+@editor
+def personas_supervisor():
+    code, name = request.form.get("code", "").strip(), _clean_name(request.form.get("name"))
+    if not (len(code) == 2 and code.isdigit()):
+        flash("El código del supervisor son dos cifras, las dos primeras del PIN (07 para el PIN 0701).", "error")
+    elif not name:
+        flash("Falta el nombre del supervisor.", "error")
+    else:
+        existed = code in store.supervisors()
+        store.set_supervisor(code, name)
+        flash(f"Supervisor {code} {'renombrado' if existed else 'añadido'}: {name}.", "ok")
+    return redirect(url_for("personas"))
+
+
+@app.route("/personas/supervisores/<code>/quitar", methods=["POST"])
+@editor
+def personas_supervisor_quitar(code):
+    if code in store.supervisors():
+        store.set_supervisor(code, "")
+        flash(f"Supervisor {code} quitado de la lista. Sus sesiones siguen ahí, sin nombre de observador.", "ok")
+    return redirect(url_for("personas"))
+
+
+@app.route("/personas/participantes", methods=["POST"])
+@editor
+def personas_participante():
+    name = _clean_name(request.form.get("name"))
+    if not name:
+        flash("Falta el nombre del participante.", "error")
+    else:
+        flash(f"Participante {store.add_participant(name)} añadido: {name}.", "ok")
+    return redirect(url_for("personas"))
+
+
+@app.route("/personas/participantes/<int:participant_id>", methods=["POST"])
+@editor
+def personas_participante_cambiar(participant_id):
+    if participant_id not in {p["id"] for p in store.participants()}:
+        abort(404)
+    if request.form.get("action") == "quitar":
+        used = sum(1 for r in dataset.runs() if r.sheet.get("participantId") == str(participant_id))
+        if used:
+            flash(f"El participante {participant_id} está elegido en {used} ficha(s): cámbialo allí antes de "
+                  "quitarlo, o renómbralo.", "error")
+        else:
+            store.set_participant(participant_id, "")
+            flash(f"Participante {participant_id} quitado de la lista. Su número no se reutiliza.", "ok")
+    else:
+        name = _clean_name(request.form.get("name"))
+        if name:
+            store.set_participant(participant_id, name)
+            flash(f"Participante {participant_id} renombrado: {name}.", "ok")
+    return redirect(url_for("personas"))
 
 
 @app.route("/archivos")

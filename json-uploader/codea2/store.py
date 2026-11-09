@@ -210,9 +210,10 @@ class Store:
             # Sin respaldo no se rechaza la subida: lo que llega del visor es lo más reciente
             pass
 
-    # ── Estado del panel: sesiones excluidas y notas ─────────────────────────
+    # ── Estado del panel: sesiones excluidas, notas, fichas y las listas de personas ──
 
-    def state(self):
+    def _document(self):
+        """El archivo de estado entero: {"sessions", "supervisors", "participants", "nextParticipant"}."""
         path = self.path(STATE_FILE)
         try:
             mtime = os.stat(path).st_mtime_ns
@@ -222,16 +223,48 @@ class Store:
             if self._state[0] != mtime:
                 try:
                     with open(path, encoding="utf-8") as handle:
-                        sessions = json.load(handle).get("sessions", {})
-                except (OSError, ValueError, AttributeError):
-                    sessions = {}
-                self._state = (mtime, sessions if isinstance(sessions, dict) else {})
+                        document = json.load(handle)
+                except (OSError, ValueError):
+                    document = {}
+                self._state = (mtime, document if isinstance(document, dict) else {})
             return self._state[1]
+
+    def state(self):
+        sessions = self._document().get("sessions", {})
+        return sessions if isinstance(sessions, dict) else {}
+
+    def supervisors(self):
+        """{"07": "Mateo", …}: el código son los dos primeros dígitos del PIN."""
+        found = self._document().get("supervisors", {})
+        return {str(k): str(v) for k, v in found.items()} if isinstance(found, dict) else {}
+
+    def participants(self):
+        """[{"id": 1, "name": "Ana"}, …], por id."""
+        found = self._document().get("participants", [])
+        if not isinstance(found, list):
+            return []
+        valid = [p for p in found if isinstance(p, dict) and isinstance(p.get("id"), int) and p.get("name")]
+        return sorted(({"id": p["id"], "name": str(p["name"])} for p in valid), key=lambda p: p["id"])
+
+    def _write(self, change):
+        """Aplica change(documento) y lo guarda de golpe: o queda entero o no se escribe."""
+        with self._lock:
+            document = json.loads(json.dumps(self._document()))  # copia: lo cacheado no se toca
+            change(document)
+            handle, temp = tempfile.mkstemp(dir=self.directory, prefix=".subiendo-", suffix=".tmp")
+            with os.fdopen(handle, "w", encoding="utf-8") as out:
+                json.dump(document, out, ensure_ascii=False, indent=2)
+            os.chmod(temp, 0o644)
+            path = self.path(STATE_FILE)
+            os.replace(temp, path)
+            # Se deja ya en memoria: dos escrituras seguidas pueden compartir marca de tiempo
+            self._state = (os.stat(path).st_mtime_ns, document)
 
     def set_state(self, name, **fields):
         """Cambia lo que se pase del estado de una sesión; lo que vaya en None no se toca."""
-        with self._lock:
-            sessions = {k: dict(v) for k, v in self.state().items() if isinstance(v, dict)}
+        def change(document):
+            sessions = document.get("sessions")
+            sessions = {k: v for k, v in sessions.items() if isinstance(v, dict)} if isinstance(sessions, dict) else {}
             entry = sessions.get(name, {})
             for key, value in fields.items():
                 if value is not None:
@@ -241,15 +274,48 @@ class Store:
                 sessions[name] = entry
             else:
                 sessions.pop(name, None)
+            document["sessions"] = sessions
+        self._write(change)
 
-            handle, temp = tempfile.mkstemp(dir=self.directory, prefix=".subiendo-", suffix=".tmp")
-            with os.fdopen(handle, "w", encoding="utf-8") as out:
-                json.dump({"sessions": sessions}, out, ensure_ascii=False, indent=2)
-            os.chmod(temp, 0o644)
-            path = self.path(STATE_FILE)
-            os.replace(temp, path)
-            # Se deja ya en memoria: dos escrituras seguidas pueden compartir marca de tiempo
-            self._state = (os.stat(path).st_mtime_ns, sessions)
+    def set_supervisor(self, code, name):
+        """Añade, renombra o (con name vacío) quita un supervisor."""
+        def change(document):
+            found = document.get("supervisors")
+            found = dict(found) if isinstance(found, dict) else {}
+            if name:
+                found[code] = name
+            else:
+                found.pop(code, None)
+            document["supervisors"] = dict(sorted(found.items()))
+        self._write(change)
+
+    def add_participant(self, name):
+        """Añade un participante con el siguiente id. Los id no se reutilizan aunque se borre alguno."""
+        created = {}
+
+        def change(document):
+            found = [p for p in document.get("participants") or [] if isinstance(p, dict)]
+            used = max([p.get("id", 0) for p in found if isinstance(p.get("id"), int)] + [0])
+            next_id = max(used + 1, int(document.get("nextParticipant") or 1))
+            found.append({"id": next_id, "name": name})
+            created["id"] = next_id
+            document["participants"] = found
+            document["nextParticipant"] = next_id + 1
+        self._write(change)
+        return created["id"]
+
+    def set_participant(self, participant_id, name):
+        """Renombra o (con name vacío) quita un participante."""
+        def change(document):
+            found = [p for p in document.get("participants") or [] if isinstance(p, dict)]
+            if name:
+                for p in found:
+                    if p.get("id") == participant_id:
+                        p["name"] = name
+            else:
+                found = [p for p in found if p.get("id") != participant_id]
+            document["participants"] = found
+        self._write(change)
 
 
 def _run_start(path):

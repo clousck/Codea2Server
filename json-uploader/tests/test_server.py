@@ -478,32 +478,76 @@ class MetricsTest(ServerCase):
         self.assertIn("fuera de MC2 (sin validar: hay un evento anterior al inicio del reto)", page)
 
     def test_session_sheet(self):
-        response = self.post_sheet("0101_5_00000", participant=" P-07 ", moment="final", help="verbal",
-                                   closure="completada", observer="VE", gameVersion="1.4",
+        self.client.post("/personas/supervisores", data={"csrf": self.csrf(), "code": "01", "name": "Mateo"})
+        self.client.post("/personas/participantes", data={"csrf": self.csrf(), "name": "Ana Pérez"})
+        response = self.post_sheet("0101_5_00000", participantId="1", moment="final", help="verbal",
+                                   closure="completada", gameVersion="1.4",
                                    e2_patrones_1="1", e2_patrones_2="0", e2_decisiones_1="1", e2_decisiones_2="NO",
                                    e2_decisiones_1_ev="«el agua enfría»", note="tranquilo")
         self.assertEqual(response.status_code, 302)
         row = self.rows("sesiones")[0]
-        self.assertEqual((row["participant"], row["moment"], row["help"], row["closure"], row["observer"],
-                          row["gameVersion"], row["note"]), ("P-07", "final", "verbal", "completada", "VE", "1.4", "tranquilo"))
+        # Código de participante = PIN; supervisor = sus dos primeras cifras, con su nombre de la lista
+        self.assertEqual((row["participant"], row["participantId"], row["supervisor"], row["observer"], row["moment"],
+                          row["help"], row["closure"], row["gameVersion"], row["note"]),
+                         ("0101", "1", "01", "Mateo", "final", "verbal", "completada", "1.4", "tranquilo"))
+        # El nombre del niño no sale en las descargas
+        self.assertNotIn("Ana Pérez", self.client.get("/exportar/sesiones.csv").get_data(as_text=True))
         # E2P: solo hay porcentaje con los dos criterios evaluados; un NO deja NC, no un cero
         e2 = self.analysis()[("0101_5_00000.json", "2")]
-        self.assertEqual((e2["participant"], e2["RP_C"], e2["RP_E"], e2["RP_P"]), ("P-07", "1", "2", "50"))
+        self.assertEqual((e2["participant"], e2["participantId"], e2["RP_C"], e2["RP_E"], e2["RP_P"]),
+                         ("0101", "1", "1", "2", "50"))
         self.assertEqual((e2["TD_C"], e2["TD_E"], e2["TD_P"], e2["PA_E"]), ("1", "1", "", ""))
         self.assertEqual(self.analysis()[("0101_5_00000.json", "1")]["RP_P"], "")
         pillars = {(r["scenario"], r["dimension"]): r for r in self.rows("pilares")}
         self.assertEqual(set(pillars), {("2", "D"), ("2", "TD"), ("2", "PA"), ("2", "RP")})
-        self.assertEqual((pillars[("2", "TD")]["C1"], pillars[("2", "TD")]["C2"], pillars[("2", "TD")]["evidence1"]),
-                         ("1", "NO", "«el agua enfría»"))
-        self.assertIn("E2P · RP</span>1 de 2 · 50 %",
-                      self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True))
+        self.assertEqual((pillars[("2", "TD")]["C1"], pillars[("2", "TD")]["C2"], pillars[("2", "TD")]["evidence1"],
+                          pillars[("2", "TD")]["observer"]), ("1", "NO", "«el agua enfría»", "Mateo"))
+        page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
+        self.assertIn("E2P · RP</span>1 de 2 · 50 %", page)
+        self.assertIn('<option value="1" selected>1 · Ana Pérez</option>', page)
 
         # Tocar otra cosa no borra la ficha, y un valor inventado no se guarda
-        self.post_sheet("0101_5_00000", excluded="0", moment="nunca")
+        self.post_sheet("0101_5_00000", excluded="0", moment="nunca", participantId="99")
         row = self.rows("sesiones")[0]
-        self.assertEqual((row["participant"], row["moment"]), ("P-07", ""))
+        self.assertEqual((row["participantId"], row["moment"], row["help"]), ("", "", "verbal"))
+        # Guardada con «Sin indicar», la ficha ya no vuelve a proponer «Final»
         page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
-        self.assertIn('value="P-07"', page)
+        self.assertNotIn('<option value="final" selected>', page)
+
+    def test_sheet_defaults_until_saved(self):
+        page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
+        for option in ('<option value="final" selected>', '<option value="ninguna" selected>',
+                       '<option value="completada" selected>'):
+            self.assertIn(option, page)
+        # Lo propuesto no cuenta hasta que se guarda: el motivo de cierre decide MC1
+        self.assertEqual(self.rows("sesiones")[0]["closure"], "")
+        # Sin el supervisor 01 en la lista, la ficha ofrece añadirlo
+        self.assertIn("Añadir el supervisor 01", page)
+
+    def test_people_lists(self):
+        token = self.csrf()
+        self.assertEqual(self.client.post("/personas/supervisores", data={"csrf": token, "code": "7",
+                                                                          "name": "X"}).status_code, 302)
+        self.assertEqual(server.store.supervisors(), {})        # el código son dos cifras
+        self.client.post("/personas/supervisores", data={"csrf": token, "code": "07", "name": "Mateo"})
+        self.client.post("/personas/supervisores", data={"csrf": token, "code": "07", "name": "Mateo R."})
+        self.assertEqual(server.store.supervisors(), {"07": "Mateo R."})
+        for name in ("Ana", "Luis", "Eva"):
+            self.client.post("/personas/participantes", data={"csrf": token, "name": name})
+        self.client.post("/personas/participantes/2", data={"csrf": token, "action": "quitar"})
+        self.client.post("/personas/participantes", data={"csrf": token, "name": "Sara"})
+        # Los números no se reutilizan
+        self.assertEqual(server.store.participants(), [{"id": 1, "name": "Ana"}, {"id": 3, "name": "Eva"},
+                                                       {"id": 4, "name": "Sara"}])
+        # Uno elegido en una ficha no se puede quitar
+        self.post_sheet("0101_5_00000", participantId="1", moment="final")
+        self.client.post("/personas/participantes/1", data={"csrf": token, "action": "quitar"})
+        self.assertIn(1, {p["id"] for p in server.store.participants()})
+        # Las listas conviven con las fichas en el mismo archivo y una escritura no borra la otra
+        self.assertEqual(server.store.state()["0101_5_00000.json"]["participantId"], "1")
+        self.assertEqual(self.status("/personas"), 200)
+        self.client.post("/logout", data={"csrf": token})
+        self.assertNotEqual(self.client.get("/personas", headers=BROWSER).status_code, 200)
 
     def test_telemetry_of_22_october(self):
         # Pruebas del escenario 2, solutionPercent y remaining

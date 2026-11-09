@@ -10,6 +10,7 @@ from datetime import datetime
 
 from .model import (SCENARIOS, ZONE, as_flag, as_float, as_int, is_selected, parse_utc, remaining,
                     seconds_between, solution_percent)
+from . import sheet as ficha
 from .solutions import compare
 
 SEQUENCE_SEPARATOR = " > "
@@ -186,11 +187,14 @@ _SESSION_TAIL = (
     Column("issues", "int", "Avisos de integridad de la sesión. El detalle está en la tabla avisos"),
     Column("excluded", "flag", "1 si la sesión está excluida del análisis en el panel"),
     Column("note", "text", "Nota escrita en el panel"),
-    Column("participant", "text", "Ficha · Código de participante"),
+    Column("participant", "text", "Código de participante: el PIN"),
+    Column("participantId", "text", "Ficha · Número del participante en la lista de Personas: une su sesión "
+                                    "inicial y su final. El nombre no se descarga"),
+    Column("supervisor", "text", "Código del supervisor: los dos primeros dígitos del PIN"),
+    Column("observer", "text", "Nombre del supervisor en la lista de Personas"),
     Column("moment", "text", "Ficha · Momento de evaluación: inicial o final"),
     Column("help", "text", "Ficha · Ayuda recibida: ninguna, verbal o directa"),
     Column("closure", "text", "Ficha · Motivo de cierre: completada, tiempo, abandono o tecnica"),
-    Column("observer", "text", "Ficha · Quién observó la sesión"),
     Column("gameVersion", "text", "Ficha · Versión del juego"),
     Column("uploadedLocal", "local", "Fecha del archivo en el servidor (última subida), en hora local"),
 )
@@ -237,8 +241,7 @@ def sessions_table(runs):
             "issues": len(run.issues),
             "excluded": run.excluded,
             "note": run.note,
-            **{key: run.sheet.get(key, "") for key in ("participant", "moment", "help", "closure", "observer",
-                                                       "gameVersion")},
+            **{key: run.sheet.get(key, "") for key in ficha.SESSION_FIELDS},
             "uploadedLocal": _local(datetime.fromtimestamp(run.file.mtime, ZONE)),
         })
         rows.append(row)

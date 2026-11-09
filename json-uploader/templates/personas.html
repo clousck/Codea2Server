@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% set active = 'personas' %}
+{% block title %}Personas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Personas</h1>
+    <p class="sub">Las listas de la ficha de sesión. Con el PIN <code>0701</code>, el supervisor es el <code>07</code> y el código de participante es el propio PIN: el observador de la ficha se pone solo. El participante se elige de su lista, y su número une su sesión inicial y su final.</p>
+  </div>
+</div>
+
+<div class="stack">
+  <section class="card">
+    <h3>Supervisores</h3>
+    <p class="sub">El código son las dos primeras cifras del PIN. Para cambiar un nombre, vuelve a añadir el mismo código con el nombre nuevo.</p>
+    <form class="card-body ficha-row" method="post" action="{{ url_for('personas_supervisor') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <label>Código
+        <input type="text" name="code" value="{{ suggested }}" inputmode="numeric" pattern="[0-9]{2}" maxlength="2" required placeholder="07" style="width: 70px">
+      </label>
+      <label>Nombre
+        <input type="text" name="name" maxlength="80" required placeholder="Mateo">
+      </label>
+      <div style="align-self: end"><button class="btn primary" type="submit">Añadir supervisor</button></div>
+    </form>
+
+    {% if missing %}
+    <div class="notice info" role="status">
+      Hay sesiones con PIN de supervisores que aún no están en la lista:
+      {% for code in missing %}<a href="{{ url_for('personas', codigo=code) }}"><code>{{ code }}</code></a> ({{ by_supervisor[code] }}){{ ', ' if not loop.last }}{% endfor %}.
+    </div>
+    {% endif %}
+
+    {% if supervisors %}
+    <div class="table-wrap">
+      <table class="data" data-sortable>
+        <thead><tr><th><button class="sort" type="button">Código</button></th><th><button class="sort" type="button">Nombre</button></th><th class="n"><button class="sort" type="button">Sesiones</button></th><th></th></tr></thead>
+        <tbody>
+          {% for code, name in supervisors.items() %}
+          <tr>
+            <td><code>{{ code }}</code></td>
+            <td>{{ name }}</td>
+            <td class="n">{{ by_supervisor.get(code, 0) }}</td>
+            <td class="n">
+              <form method="post" action="{{ url_for('personas_supervisor_quitar', code=code) }}" onsubmit="return confirm('¿Quitar al supervisor {{ code }} de la lista?')">
+                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                <button class="btn ghost" type="submit">Quitar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Aún no hay supervisores.</div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h3>Participantes</h3>
+    <p class="sub">Cada uno recibe el siguiente número, que no se reutiliza aunque se quite a alguien. Los nombres solo se ven con la sesión iniciada y no salen en las descargas: las tablas llevan el número (<code>participantId</code>).</p>
+    <form class="card-body ficha-row" method="post" action="{{ url_for('personas_participante') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <label>Nombre
+        <input type="text" name="name" maxlength="80" required placeholder="Nombre y apellido">
+      </label>
+      <div style="align-self: end"><button class="btn primary" type="submit">Añadir participante</button></div>
+    </form>
+
+    {% if participants %}
+    <div class="table-wrap">
+      <table class="data" data-sortable>
+        <thead><tr><th class="n"><button class="sort" type="button">N.º</button></th><th><button class="sort" type="button">Nombre</button></th><th class="n"><button class="sort" type="button">Fichas</button></th><th></th></tr></thead>
+        <tbody>
+          {% for p in participants %}
+          <tr>
+            <td class="n" data-v="{{ p.id }}">{{ p.id }}</td>
+            <td>
+              <form class="btn-row" method="post" action="{{ url_for('personas_participante_cambiar', participant_id=p.id) }}">
+                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                <input type="text" name="name" value="{{ p.name }}" maxlength="80" required aria-label="Nombre del participante {{ p.id }}">
+                <button class="btn ghost" type="submit">Renombrar</button>
+              </form>
+            </td>
+            <td class="n">{{ by_participant.get(p.id|string, 0) }}</td>
+            <td class="n">
+              <form method="post" action="{{ url_for('personas_participante_cambiar', participant_id=p.id) }}" onsubmit="return confirm('¿Quitar al participante {{ p.id }} de la lista?')">
+                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="quitar">
+                <button class="btn ghost" type="submit">Quitar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Aún no hay participantes.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

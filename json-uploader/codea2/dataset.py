@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timezone
 
+from . import sheet as ficha
 from .checks import check_run, cross_checks
 from .model import build_run
 
@@ -17,6 +18,7 @@ class Dataset:
     def runs(self):
         """Todas las sesiones legibles, de la más antigua a la más reciente."""
         state = self.store.state()
+        supervisors, participants = self.store.supervisors(), self.store.participants()
         built = {}
         runs = []
         for file in self.store.files():
@@ -30,7 +32,8 @@ class Dataset:
             built[file.name] = cached
             entry = state.get(file.name) or {}
             runs.append(replace(cached[1], excluded=bool(entry.get("excluded")),
-                                note=str(entry.get("note") or ""), sheet=entry))
+                                note=str(entry.get("note") or ""),
+                                sheet=ficha.resolve(entry, cached[1].pin, supervisors, participants)))
         self._built = built
 
         extra = cross_checks(runs)
