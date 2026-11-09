@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from .model import Issue, as_flag, as_float, as_int, is_selected, parse_utc, solution_percent
 from .solutions import compare
+from . import sheet as ficha
 
 # Margen para dar un evento por posterior al fin de su escenario. Hacia el inicio no hay
 # margen: el reto se abre antes de la narración, así que un evento anterior, aunque sea
@@ -228,4 +229,34 @@ def cross_checks(runs):
                 found[run.id].append(Issue("pin_repetido", None, (
                     f"Comparte pin y sessionId con {', '.join(other)}, pero empezó a otra hora: "
                     "dos visores usaron el mismo PIN con el mismo contador.")))
+    return found
+
+
+def roster_checks(runs, students):
+    """Avisos que dependen de la lista de estudiantes. Devuelve {id de sesión: [avisos]}.
+
+    - pin_desconocido: el código no está en la lista (¿PIN mal tecleado en el visor?). Solo con
+      lista: antes de cargarla, todas las sesiones lo darían.
+    - pin_doble: el mismo código tiene dos sesiones con el mismo momento. Las excluidas no cuentan.
+    """
+    found = defaultdict(list)
+    by_moment = defaultdict(list)
+    for run in runs:
+        code = run.sheet.get("participant", "")
+        if students and code and code not in students:
+            found[run.id].append(Issue("pin_desconocido", None, (
+                f"El código {code} no está en la lista de estudiantes. Si el PIN se tecleó mal en el visor, "
+                "corrígelo en la ficha; si es un estudiante nuevo, añádelo en Personas.")))
+        moment = ficha.value(run.sheet, "moment")
+        if code and moment and not run.excluded:
+            by_moment[(code, moment)].append(run)
+    for (code, moment), group in by_moment.items():
+        if len(group) < 2:
+            continue
+        for run in group:
+            others = ", ".join(o.file.name for o in group if o is not run)
+            found[run.id].append(Issue("pin_doble", None, (
+                f"El código {code} tiene otra sesión con momento {ficha.MOMENTS.get(moment, moment).lower()}: "
+                f"{others}. ¿El mismo estudiante dos veces o dos estudiantes con el mismo PIN? Corrige el "
+                "momento o el PIN en la ficha, o excluye la que sobre.")))
     return found

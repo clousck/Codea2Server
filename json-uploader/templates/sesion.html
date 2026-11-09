@@ -27,8 +27,9 @@
       {% if run.device_id %}<span class="tag" title="Código del visor">Visor {{ run.device_id }}</span>{% endif %}
       {% if run.excluded %}<span class="tag">Excluida del análisis</span>{% endif %}
       {% if run.legacy %}<span class="tag" title="JSON anterior al 06/10/2026: no entra en el análisis">Formato anterior</span>{% endif %}
-      {% if can_edit and run.sheet.participantName %}<span class="tag" title="Participante {{ run.sheet.participantId }}">{{ run.sheet.participantName }}</span>{% endif %}
-      {% if run.sheet.observer %}<span class="tag" title="Supervisor {{ run.sheet.supervisor }}">{{ run.sheet.observer }}</span>{% endif %}
+      {% if run.sheet.pinCorrected %}<span class="tag" title="El visor mandó el PIN {{ run.sheet.visorPin }}">PIN corregido: {{ run.sheet.participant }}</span>{% endif %}
+      {% if can_edit and run.sheet.participantName %}<span class="tag" title="Estudiante {{ run.sheet.participant }}">{{ run.sheet.participantName }}</span>{% endif %}
+      {% if run.sheet.supervisorName %}<span class="tag" title="Supervisor {{ run.sheet.supervisor }}">{{ run.sheet.supervisorName }}</span>{% endif %}
       {% if run.sheet.moment %}<span class="tag">{{ sheet.MOMENTS[run.sheet.moment] }}</span>{% endif %}
       {{ run.started_at|dt('%d/%m/%Y, %H:%M:%S') }} · {{ run.seconds|clock }} min ·
       {{ run.scenarios_completed }} de {{ SCENARIOS|length }} escenarios completados
@@ -238,22 +239,20 @@
     <form method="post" action="{{ url_for('sesion_estado', run_id=run.id) }}" class="card-body ficha">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <div class="ficha-row">
-        <label>Código de participante
-          <input type="text" value="{{ run.sheet.participant }}" readonly title="Es el PIN de la sesión" style="width: 90px">
+        <label title="El PIN que mandó el visor. Si se tecleó mal, escribe aquí el correcto: el JSON no se toca">Código de participante (PIN)
+          <input type="text" name="pinFix" value="{{ run.sheet.pinFix or '' }}" placeholder="{{ run.sheet.visorPin }}" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" style="width: 90px" aria-label="PIN corregido">
+          <span class="sub">{% if run.sheet.pinCorrected %}El visor mandó {{ run.sheet.visorPin }}{% else %}Solo para corregir un PIN mal tecleado{% endif %}</span>
         </label>
         <label>Participante
-          <select name="participantId">
-            <option value="">Sin elegir</option>
-            {% for p in participants %}<option value="{{ p.id }}"{% if run.sheet.participantId == p.id|string %} selected{% endif %}>{{ p.id }} · {{ p.name }}</option>{% endfor %}
-          </select>
-          {% if not participants %}<span class="sub"><a href="{{ url_for('personas') }}">Añadir participantes</a></span>{% endif %}
+          <input type="text" value="{{ run.sheet.participantName }}" readonly placeholder="{{ 'No está en la lista' if not run.sheet.listed else '' }}">
+          {% if not run.sheet.listed %}<span class="sub"><a href="{{ url_for('personas') }}#estudiantes">Añadir el {{ run.sheet.participant }} a la lista</a></span>{% elif run.sheet.retired %}<span class="sub">Retirado de la lista</span>{% endif %}
         </label>
-        <label>Observador
-          <input type="text" value="{{ run.sheet.observer if run.sheet.observerListed else '' }}" readonly placeholder="{{ 'Supervisor ' ~ run.sheet.supervisor ~ ' sin nombre' if run.sheet.supervisor else 'El PIN no indica supervisor' }}" title="El supervisor {{ run.sheet.supervisor }}, de las dos primeras cifras del PIN">
-          {% if run.sheet.supervisor and not run.sheet.observerListed %}<span class="sub"><a href="{{ url_for('personas', codigo=run.sheet.supervisor) }}">Añadir el supervisor {{ run.sheet.supervisor }}</a></span>{% endif %}
+        <label>Supervisor
+          <input type="text" value="{{ run.sheet.supervisorName if run.sheet.supervisorListed else '' }}" readonly placeholder="{{ 'Supervisor ' ~ run.sheet.supervisor ~ ' sin nombre' if run.sheet.supervisor else 'Sin supervisor' }}" title="El supervisor {{ run.sheet.supervisor }}, de la lista de estudiantes">
+          {% if run.sheet.supervisor and not run.sheet.supervisorListed %}<span class="sub"><a href="{{ url_for('personas', codigo=run.sheet.supervisor) }}">Añadir el supervisor {{ run.sheet.supervisor }}</a></span>{% endif %}
         </label>
         {% set moment = sheet.value(run.sheet, 'moment') %}{% set help = sheet.value(run.sheet, 'help') %}{% set closure = sheet.value(run.sheet, 'closure') %}
-        <label>Momento
+        <label title="Si la ficha no se ha guardado, se propone por orden: la primera sesión del código es la inicial y las siguientes, la final">Momento
           <select name="moment"><option value="">Sin indicar</option>{% for value, label in sheet.MOMENTS.items() %}<option value="{{ value }}"{% if moment == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
         </label>
         <label>Ayuda recibida

@@ -62,7 +62,7 @@ def headline(runs):
     uploads = [r.file.mtime for r in runs]
     return {
         "sessions": len(runs),
-        "participants": len({r.pin for r in runs}),
+        "participants": len({r.sheet.get("participant") or r.pin for r in runs}),
         "completed_all": completed,
         "completed_ratio": _ratio(completed, len(runs)),
         "duration": durations,

@@ -395,7 +395,8 @@ class Filters:
                 return False
             if (self.date_from and day < self.date_from) or (self.date_to and day > self.date_to):
                 return False
-        return not self.pin or self._pin_matches(run.pin)
+        # Vale el PIN del visor o el corregido en la ficha
+        return not self.pin or self._pin_matches(run.pin) or self._pin_matches(run.sheet.get("participant", ""))
 
     def apply(self, runs, with_excluded=None):
         """Las sesiones del recorte. Las excluidas solo entran si se piden."""

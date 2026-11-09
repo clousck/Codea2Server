@@ -1,7 +1,9 @@
 """Servidor de CODEA 2: recibe los JSON de sesión del visor y los muestra en un panel."""
 
+import csv
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
@@ -265,7 +267,7 @@ def sesion(run_id):
         abort(404, description="No hay ninguna sesión con ese nombre.")
     index = runs.index(run)
     return render_template(
-        "sesion.html", run=run, sheet=sheet, participants=store.participants() if session.get("auth") else [],
+        "sesion.html", run=run, sheet=sheet,
         measures={n: metrics.scenario_metrics(run, n) for n in run.scenarios},
         previous=runs[index - 1] if index else None,
         following=runs[index + 1] if index + 1 < len(runs) else None,
@@ -284,10 +286,13 @@ def sesion_estado(run_id):
         abort(404)
     # El formulario manda un "0" oculto y, si la casilla está marcada, un "1" detrás: vale el último
     excluded = request.form.getlist("excluded")
+    pin_fix = request.form.get("pinFix", "").strip()
+    if pin_fix and not sheet.valid_code(pin_fix):
+        flash(f"El PIN corregido tiene que ser de 4 cifras: «{pin_fix}» no se guardó.", "error")
     store.set_state(run.file.name,
                     excluded=excluded[-1] == "1" if excluded else None,
                     note=request.form.get("note"),
-                    **sheet.from_form(request.form, [p["id"] for p in store.participants()]))
+                    **sheet.from_form(request.form))
     if request.headers.get("X-Requested-With") == "fetch":
         return {"status": "ok"}
     target = request.form.get("next")
@@ -327,18 +332,23 @@ def _clean_name(value):
 @app.route("/personas")
 @signed_in
 def personas():
-    supervisors, participants = store.supervisors(), store.participants()
+    supervisors, students = store.supervisors(), store.students()
     runs = dataset.runs()
-    by_supervisor, by_participant = {}, {}
+    sessions_of = {}
     for run in runs:
-        by_supervisor[run.sheet["supervisor"]] = by_supervisor.get(run.sheet["supervisor"], 0) + 1
-        if run.sheet.get("participantId"):
-            by_participant[run.sheet["participantId"]] = by_participant.get(run.sheet["participantId"], 0) + 1
-    # Códigos que aparecen en los PIN y aún no tienen nombre
-    missing = sorted(code for code in by_supervisor if code and code not in supervisors)
-    return render_template("personas.html", supervisors=supervisors, participants=participants,
-                           by_supervisor=by_supervisor, by_participant=by_participant, missing=missing,
-                           suggested=request.args.get("codigo", ""))
+        if not run.excluded:
+            sessions_of.setdefault(run.sheet["participant"], []).append(run)
+    by_supervisor = {}
+    for code, student in students.items():
+        by_supervisor[student["supervisor"]] = by_supervisor.get(student["supervisor"], 0) + 1
+    # Lo que aún no cuadra con las listas
+    unknown = [r for r in runs if not r.excluded and students and not r.sheet["listed"]]
+    missing = sorted({s["supervisor"] for s in students.values()} - set(supervisors))
+    chosen = request.args.get("supervisor", "")
+    shown = {c: s for c, s in students.items() if not chosen or s["supervisor"] == chosen}
+    return render_template("personas.html", sheet=sheet, supervisors=supervisors, students=shown, all_students=students,
+                           sessions_of=sessions_of, by_supervisor=by_supervisor, unknown=unknown, missing=missing,
+                           chosen=chosen, suggested=request.args.get("codigo", ""))
 
 
 @app.route("/personas/supervisores", methods=["POST"])
@@ -346,7 +356,8 @@ def personas():
 def personas_supervisor():
     code, name = request.form.get("code", "").strip(), _clean_name(request.form.get("name"))
     if not (len(code) == 2 and code.isdigit()):
-        flash("El código del supervisor son dos cifras, las dos primeras del PIN (07 para el PIN 0701).", "error")
+        flash("El código del supervisor son dos cifras: las dos primeras de los códigos de sus estudiantes "
+              "(07 para 0701, 0702…).", "error")
     elif not name:
         flash("Falta el nombre del supervisor.", "error")
     else:
@@ -359,42 +370,81 @@ def personas_supervisor():
 @app.route("/personas/supervisores/<code>/quitar", methods=["POST"])
 @editor
 def personas_supervisor_quitar(code):
-    if code in store.supervisors():
+    used = sum(1 for s in store.students().values() if s["supervisor"] == code)
+    if used:
+        flash(f"El supervisor {code} tiene {used} estudiante(s) en la lista: pásalos a otro supervisor antes de "
+              "quitarlo, o cámbiale el nombre.", "error")
+    elif code in store.supervisors():
         store.set_supervisor(code, "")
-        flash(f"Supervisor {code} quitado de la lista. Sus sesiones siguen ahí, sin nombre de observador.", "ok")
+        flash(f"Supervisor {code} quitado de la lista.", "ok")
     return redirect(url_for("personas"))
 
 
-@app.route("/personas/participantes", methods=["POST"])
+@app.route("/personas/estudiantes", methods=["POST"])
 @editor
-def personas_participante():
-    name = _clean_name(request.form.get("name"))
-    if not name:
-        flash("Falta el nombre del participante.", "error")
+def personas_estudiantes():
+    supervisor = request.form.get("supervisor", "").strip()
+    if supervisor not in store.supervisors():
+        flash("Elige primero el supervisor de estos estudiantes (y añádelo si no está).", "error")
+        return redirect(url_for("personas"))
+    lines = request.form.get("names", "").splitlines()
+    added, errors = store.add_students(supervisor, lines)
+    for error in errors:
+        flash(error, "error")
+    if errors:
+        flash("No se añadió ninguno: corrige esas líneas y vuelve a enviarlas todas.", "error")
+    elif added:
+        codes = sorted(code for code, _ in added)
+        codes = ", ".join(codes) if len(codes) <= 6 else f"{codes[0]} … {codes[-1]}"
+        flash(f"{len(added)} estudiante(s) añadido(s) al supervisor {supervisor}: {codes}.", "ok")
     else:
-        flash(f"Participante {store.add_participant(name)} añadido: {name}.", "ok")
-    return redirect(url_for("personas"))
+        flash("No había ningún nombre: escribe uno por línea.", "error")
+    return redirect(url_for("personas", supervisor=supervisor))
 
 
-@app.route("/personas/participantes/<int:participant_id>", methods=["POST"])
+@app.route("/personas/estudiantes/<code>", methods=["POST"])
 @editor
-def personas_participante_cambiar(participant_id):
-    if participant_id not in {p["id"] for p in store.participants()}:
+def personas_estudiante(code):
+    if code not in store.students():
         abort(404)
-    if request.form.get("action") == "quitar":
-        used = sum(1 for r in dataset.runs() if r.sheet.get("participantId") == str(participant_id))
-        if used:
-            flash(f"El participante {participant_id} está elegido en {used} ficha(s): cámbialo allí antes de "
-                  "quitarlo, o renómbralo.", "error")
-        else:
-            store.set_participant(participant_id, "")
-            flash(f"Participante {participant_id} quitado de la lista. Su número no se reutiliza.", "ok")
-    else:
-        name = _clean_name(request.form.get("name"))
-        if name:
-            store.set_participant(participant_id, name)
-            flash(f"Participante {participant_id} renombrado: {name}.", "ok")
-    return redirect(url_for("personas"))
+    supervisor = request.form.get("supervisor", "").strip()
+    if supervisor and supervisor not in store.supervisors():
+        flash(f"El supervisor {supervisor} no está en la lista.", "error")
+        return redirect(url_for("personas"))
+    action = request.form.get("action")
+    store.set_student(code, name=_clean_name(request.form.get("name")) or None, supervisor=supervisor or None,
+                      retired=True if action == "retirar" else False if action == "reactivar" else None)
+    flash(f"Estudiante {code} {'retirado' if action == 'retirar' else 'actualizado'}.", "ok")
+    return redirect(url_for("personas", supervisor=request.form.get("back", "")))
+
+
+@app.route("/personas/lista")
+@signed_in
+def personas_lista():
+    """La lista para imprimir: lo impreso y lo del panel no pueden diferir."""
+    supervisors, students = store.supervisors(), store.students()
+    chosen = request.args.get("supervisor", "")
+    groups = {}
+    for code, student in students.items():
+        if student["retired"] or (chosen and student["supervisor"] != chosen):
+            continue
+        groups.setdefault(student["supervisor"], []).append((code, student["name"]))
+    return render_template("personas_lista.html", groups=dict(sorted(groups.items())), supervisors=supervisors)
+
+
+@app.route("/personas/estudiantes.csv")
+@signed_in
+def personas_csv():
+    supervisors = store.supervisors()
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["codigo", "nombre", "supervisor", "supervisorNombre", "retirado"])
+    for code, student in store.students().items():
+        writer.writerow([code, student["name"], student["supervisor"], supervisors.get(student["supervisor"], ""),
+                         1 if student["retired"] else 0])
+    # Con BOM: Excel lo abre en UTF-8 con las tildes bien. Ojo: al abrirlo, Excel quita el 0 de 0701
+    return Response("﻿" + out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=codea2_estudiantes.csv"})
 
 
 @app.route("/archivos")

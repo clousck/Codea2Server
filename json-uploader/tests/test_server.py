@@ -477,78 +477,150 @@ class MetricsTest(ServerCase):
         page = self.client.get("/sesiones/0109_9_00000", headers=BROWSER).get_data(as_text=True)
         self.assertIn("fuera de MC2 (sin validar: hay un evento anterior al inicio del reto)", page)
 
+    def roster(self, supervisor="01", name="Mateo", students="Ana Pérez"):
+        token = self.csrf()
+        self.client.post("/personas/supervisores", data={"csrf": token, "code": supervisor, "name": name})
+        return self.client.post("/personas/estudiantes", data={"csrf": token, "supervisor": supervisor,
+                                                               "names": students})
+
     def test_session_sheet(self):
-        self.client.post("/personas/supervisores", data={"csrf": self.csrf(), "code": "01", "name": "Mateo"})
-        self.client.post("/personas/participantes", data={"csrf": self.csrf(), "name": "Ana Pérez"})
-        response = self.post_sheet("0101_5_00000", participantId="1", moment="final", help="verbal",
-                                   closure="completada", gameVersion="1.4",  # ya no existe: se ignora
+        self.roster()                                         # Ana Pérez recibe el 0101, el PIN de la sesión
+        response = self.post_sheet("0101_5_00000", moment="final", help="verbal", closure="completada",
                                    e2_patrones_1="1", e2_patrones_2="0", e2_decisiones_1="1", e2_decisiones_2="NO",
                                    e2_decisiones_1_ev="«el agua enfría»", note="tranquilo")
         self.assertEqual(response.status_code, 302)
         row = self.rows("sesiones")[0]
-        # Código de participante = PIN; supervisor = sus dos primeras cifras, con su nombre de la lista
-        self.assertEqual((row["participant"], row["participantId"], row["supervisor"], row["observer"], row["moment"],
-                          row["help"], row["closure"], row["note"]),
-                         ("0101", "1", "01", "Mateo", "final", "verbal", "completada", "tranquilo"))
-        self.assertNotIn("gameVersion", row)
+        # Estudiante y supervisor salen del PIN y de la lista
+        self.assertEqual((row["participant"], row["pinCorrected"], row["supervisor"], row["supervisorName"],
+                          row["moment"], row["help"], row["closure"], row["note"]),
+                         ("0101", "0", "01", "Mateo", "final", "verbal", "completada", "tranquilo"))
+        self.assertNotIn("observer", row)
         # El nombre del niño no sale en las descargas
-        self.assertNotIn("Ana Pérez", self.client.get("/exportar/sesiones.csv").get_data(as_text=True))
+        for table in ("sesiones", "analisis", "pilares"):
+            self.assertNotIn("Ana Pérez", self.client.get(f"/exportar/{table}.csv").get_data(as_text=True))
         # E2P: solo hay porcentaje con los dos criterios evaluados; un NO deja NC, no un cero
         e2 = self.analysis()[("0101_5_00000.json", "2")]
-        self.assertEqual((e2["participant"], e2["participantId"], e2["RP_C"], e2["RP_E"], e2["RP_P"]),
-                         ("0101", "1", "1", "2", "50"))
+        self.assertEqual((e2["participant"], e2["supervisorName"], e2["RP_C"], e2["RP_E"], e2["RP_P"]),
+                         ("0101", "Mateo", "1", "2", "50"))
         self.assertEqual((e2["TD_C"], e2["TD_E"], e2["TD_P"], e2["PA_E"]), ("1", "1", "", ""))
         self.assertEqual(self.analysis()[("0101_5_00000.json", "1")]["RP_P"], "")
         pillars = {(r["scenario"], r["dimension"]): r for r in self.rows("pilares")}
         self.assertEqual(set(pillars), {("2", "D"), ("2", "TD"), ("2", "PA"), ("2", "RP")})
         self.assertEqual((pillars[("2", "TD")]["C1"], pillars[("2", "TD")]["C2"], pillars[("2", "TD")]["evidence1"],
-                          pillars[("2", "TD")]["observer"]), ("1", "NO", "«el agua enfría»", "Mateo"))
+                          pillars[("2", "TD")]["supervisorName"]), ("1", "NO", "«el agua enfría»", "Mateo"))
         page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
         self.assertIn("E2P · RP</span>1 de 2 · 50 %", page)
-        self.assertIn('<option value="1" selected>1 · Ana Pérez</option>', page)
+        self.assertIn('value="Ana Pérez" readonly', page)
 
         # Tocar otra cosa no borra la ficha, y un valor inventado no se guarda
-        self.post_sheet("0101_5_00000", excluded="0", moment="nunca", participantId="99")
+        self.post_sheet("0101_5_00000", excluded="0", moment="nunca")
         row = self.rows("sesiones")[0]
-        self.assertEqual((row["participantId"], row["moment"], row["help"]), ("", "", "verbal"))
-        # Guardada con «Sin indicar», la ficha ya no vuelve a proponer «Final»
+        self.assertEqual((row["moment"], row["help"]), ("", "verbal"))
+        # Guardada con «Sin indicar», la ficha ya no vuelve a proponer un momento
         page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
+        self.assertNotIn('<option value="inicial" selected>', page)
         self.assertNotIn('<option value="final" selected>', page)
 
-    def test_sheet_defaults_until_saved(self):
+    def test_sheet_proposals_until_saved(self):
         page = self.client.get("/sesiones/0101_5_00000", headers=BROWSER).get_data(as_text=True)
-        for option in ('<option value="final" selected>', '<option value="ninguna" selected>',
+        # Primera sesión del código: inicial. Y sin ayuda, completó la sesión
+        for option in ('<option value="inicial" selected>', '<option value="ninguna" selected>',
                        '<option value="completada" selected>'):
             self.assertIn(option, page)
         # Lo propuesto no cuenta hasta que se guarda: el motivo de cierre decide MC1
         self.assertEqual(self.rows("sesiones")[0]["closure"], "")
-        # Sin el supervisor 01 en la lista, la ficha ofrece añadirlo
         self.assertIn("Añadir el supervisor 01", page)
+
+    def test_pin_correction(self):
+        self.roster(students="0107 Ana Pérez")
+        # El visor mandó 0101; el estudiante era el 0107
+        self.assertIn("pin_desconocido", {i.code for i in server.dataset.get("0101_5_00000").issues})
+        self.post_sheet("0101_5_00000", pinFix="0107")
+        run = server.dataset.get("0101_5_00000")
+        self.assertEqual((run.pin, run.sheet["participant"], run.sheet["participantName"]),
+                         ("0101", "0107", "Ana Pérez"))
+        self.assertNotIn("pin_desconocido", {i.code for i in run.issues})
+        row = self.rows("sesiones")[0]
+        self.assertEqual((row["pin"], row["participant"], row["pinCorrected"]), ("0101", "0107", "1"))
+        # El filtro por PIN encuentra la sesión por los dos
+        self.assertEqual(len(self.rows("sesiones", "?pin=0107")), 1)
+        self.assertEqual(len(self.rows("sesiones", "?pin=0101")), 1)
+        # Un PIN que no es de 4 cifras no se guarda
+        self.post_sheet("0101_5_00000", pinFix="12")
+        self.assertEqual(server.dataset.get("0101_5_00000").sheet["participant"], "0107")
+        self.post_sheet("0101_5_00000", pinFix="")
+        self.assertEqual(server.dataset.get("0101_5_00000").sheet["participant"], "0101")
+
+    def test_same_student_twice(self):
+        # Tres sesiones del mismo código: inicial, final y otra final de más
+        self.roster()
+        for name, start in (("0101_7_AAAAA.json", "2026-10-02"), ("0101_8_AAAAA.json", "2026-10-03")):
+            data = json.loads((CURRENT / "0101_5_00000.json").read_text(encoding="utf-8-sig"))
+            data.update(sessionId=int(name.split("_")[1]), deviceId="AAAAA",
+                        startedUtc=f"{start}T10:00:00.0000000Z", endedUtc=f"{start}T10:20:00.0000000Z")
+            self.put(name, json.dumps(data).encode())
+        runs = [r for r in server.dataset.runs() if r.sheet["participant"] == "0101"]
+        self.assertEqual([server.sheet.value(r.sheet, "moment") for r in runs], ["inicial", "final", "final"])
+        doubled = [r for r in runs if "pin_doble" in {i.code for i in r.issues}]
+        self.assertEqual(len(doubled), 2)
+        # Excluir la que sobra quita el aviso
+        self.post_sheet(doubled[-1].id, excluded="1")
+        self.assertFalse(any("pin_doble" in {i.code for i in r.issues} for r in server.dataset.runs()))
 
     def test_people_lists(self):
         token = self.csrf()
-        self.assertEqual(self.client.post("/personas/supervisores", data={"csrf": token, "code": "7",
-                                                                          "name": "X"}).status_code, 302)
+        self.client.post("/personas/supervisores", data={"csrf": token, "code": "7", "name": "X"})
         self.assertEqual(server.store.supervisors(), {})        # el código son dos cifras
+        # Sin supervisor en la lista no se dan de alta estudiantes
+        self.client.post("/personas/estudiantes", data={"csrf": token, "supervisor": "07", "names": "Ana"})
+        self.assertEqual(server.store.students(), {})
         self.client.post("/personas/supervisores", data={"csrf": token, "code": "07", "name": "Mateo"})
         self.client.post("/personas/supervisores", data={"csrf": token, "code": "07", "name": "Mateo R."})
-        self.assertEqual(server.store.supervisors(), {"07": "Mateo R."})
-        for name in ("Ana", "Luis", "Eva"):
-            self.client.post("/personas/participantes", data={"csrf": token, "name": name})
-        self.client.post("/personas/participantes/2", data={"csrf": token, "action": "quitar"})
-        self.client.post("/personas/participantes", data={"csrf": token, "name": "Sara"})
-        # Los números no se reutilizan
-        self.assertEqual(server.store.participants(), [{"id": 1, "name": "Ana"}, {"id": 3, "name": "Eva"},
-                                                       {"id": 4, "name": "Sara"}])
-        # Uno elegido en una ficha no se puede quitar
-        self.post_sheet("0101_5_00000", participantId="1", moment="final")
-        self.client.post("/personas/participantes/1", data={"csrf": token, "action": "quitar"})
-        self.assertIn(1, {p["id"] for p in server.store.participants()})
+        self.client.post("/personas/supervisores", data={"csrf": token, "code": "08", "name": "Lucía"})
+        self.assertEqual(server.store.supervisors(), {"07": "Mateo R.", "08": "Lucía"})
+        # Varios a la vez, uno por línea; las líneas vacías no cuentan; un código explícito se respeta
+        self.client.post("/personas/estudiantes", data={"csrf": token, "supervisor": "07",
+                                                        "names": "Ana Pérez\r\n\r\n  Luis   Torres \n0710 Eva Mora"})
+        self.assertEqual({c: s["name"] for c, s in server.store.students().items()},
+                         {"0701": "Ana Pérez", "0702": "Luis Torres", "0710": "Eva Mora"})
+        # Los siguientes van detrás del más alto, sin rellenar huecos
+        self.client.post("/personas/estudiantes", data={"csrf": token, "supervisor": "07", "names": "Sara"})
+        self.assertIn("0711", server.store.students())
+        # Si una línea falla no se añade ninguna
+        self.client.post("/personas/estudiantes", data={"csrf": token, "supervisor": "07",
+                                                        "names": "Pablo\n0701 Otra Persona"})
+        self.assertEqual(len(server.store.students()), 4)
+        # Un estudiante cambia de supervisor sin cambiar de código; retirado no sale en la lista impresa
+        self.client.post("/personas/estudiantes/0702", data={"csrf": token, "name": "Luis Torres", "supervisor": "08"})
+        self.client.post("/personas/estudiantes/0710", data={"csrf": token, "action": "retirar"})
+        students = server.store.students()
+        self.assertEqual((students["0702"]["supervisor"], students["0710"]["retired"]), ("08", True))
+        printed = self.client.get("/personas/lista").get_data(as_text=True)
+        self.assertIn("Luis Torres", printed)
+        self.assertNotIn("Eva Mora", printed)
+        self.assertIn("0702,Luis Torres,08,Lucía,0", self.client.get("/personas/estudiantes.csv").get_data(as_text=True))
+        # Un supervisor con estudiantes no se puede quitar
+        self.client.post("/personas/supervisores/08/quitar", data={"csrf": token})
+        self.assertIn("08", server.store.supervisors())
         # Las listas conviven con las fichas en el mismo archivo y una escritura no borra la otra
-        self.assertEqual(server.store.state()["0101_5_00000.json"]["participantId"], "1")
+        self.post_sheet("0101_5_00000", moment="final")
+        self.assertEqual(server.store.state()["0101_5_00000.json"]["moment"], "final")
+        self.assertEqual(len(server.store.students()), 4)
         self.assertEqual(self.status("/personas"), 200)
         self.client.post("/logout", data={"csrf": token})
         self.assertNotEqual(self.client.get("/personas", headers=BROWSER).status_code, 200)
+
+    def test_block_full(self):
+        self.roster(students="0199 Último")
+        self.roster(students="Uno más")
+        # 0199 ya está: el bloque 01 no tiene más códigos libres por detrás
+        self.assertEqual(sorted(server.store.students()), ["0199"])
+
+    def test_names_follow_explicit_codes(self):
+        # En la misma tanda, un nombre suelto va detrás del código escrito antes
+        self.roster(students="0105 Ana Pérez\nLuis Torres")
+        self.assertEqual({c: s["name"] for c, s in server.store.students().items()},
+                         {"0105": "Ana Pérez", "0106": "Luis Torres"})
 
     def test_telemetry_of_22_october(self):
         # Pruebas del escenario 2, solutionPercent y remaining

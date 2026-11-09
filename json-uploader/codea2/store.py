@@ -213,7 +213,7 @@ class Store:
     # ── Estado del panel: sesiones excluidas, notas, fichas y las listas de personas ──
 
     def _document(self):
-        """El archivo de estado entero: {"sessions", "supervisors", "participants", "nextParticipant"}."""
+        """El archivo de estado entero: {"sessions", "supervisors", "students"}."""
         path = self.path(STATE_FILE)
         try:
             mtime = os.stat(path).st_mtime_ns
@@ -238,13 +238,14 @@ class Store:
         found = self._document().get("supervisors", {})
         return {str(k): str(v) for k, v in found.items()} if isinstance(found, dict) else {}
 
-    def participants(self):
-        """[{"id": 1, "name": "Ana"}, …], por id."""
-        found = self._document().get("participants", [])
-        if not isinstance(found, list):
-            return []
-        valid = [p for p in found if isinstance(p, dict) and isinstance(p.get("id"), int) and p.get("name")]
-        return sorted(({"id": p["id"], "name": str(p["name"])} for p in valid), key=lambda p: p["id"])
+    def students(self):
+        """{"0701": {"name": "Ana", "supervisor": "07", "retired": False}, …}, por código."""
+        found = self._document().get("students", {})
+        if not isinstance(found, dict):
+            return {}
+        return {str(code): {"name": str(v.get("name") or ""), "supervisor": str(v.get("supervisor") or ""),
+                            "retired": bool(v.get("retired"))}
+                for code, v in sorted(found.items()) if isinstance(v, dict)}
 
     def _write(self, change):
         """Aplica change(documento) y lo guarda de golpe: o queda entero o no se escribe."""
@@ -289,32 +290,70 @@ class Store:
             document["supervisors"] = dict(sorted(found.items()))
         self._write(change)
 
-    def add_participant(self, name):
-        """Añade un participante con el siguiente id. Los id no se reutilizan aunque se borre alguno."""
-        created = {}
+    def add_students(self, supervisor, lines):
+        """Da de alta una línea por estudiante con el supervisor indicado.
+
+        Una línea es un nombre, que recibe el siguiente código libre del bloque del supervisor
+        (07 → 0701, 0702…, siempre detrás del más alto ya dado), o «0701 Nombre» para respetar un
+        código ya numerado. Los códigos no se reutilizan: un estudiante que se va queda retirado.
+        Devuelve (añadidos [(código, nombre)], errores [texto]). Si hay algún error no se guarda nada.
+        """
+        added, errors = [], []
 
         def change(document):
-            found = [p for p in document.get("participants") or [] if isinstance(p, dict)]
-            used = max([p.get("id", 0) for p in found if isinstance(p.get("id"), int)] + [0])
-            next_id = max(used + 1, int(document.get("nextParticipant") or 1))
-            found.append({"id": next_id, "name": name})
-            created["id"] = next_id
-            document["participants"] = found
-            document["nextParticipant"] = next_id + 1
+            found = document.get("students")
+            found = dict(found) if isinstance(found, dict) else {}
+            block = [int(code[2:]) for code in found if code.startswith(supervisor) and code[2:].isdigit()]
+            following = max(block + [0]) + 1
+            for number, line in enumerate(lines, start=1):
+                line = " ".join(line.split())
+                if not line:
+                    continue
+                head, _, rest = line.partition(" ")
+                if len(head) == 4 and head.isdigit() and rest:
+                    code, name = head, rest
+                    if head.startswith(supervisor):
+                        # Los nombres sueltos siguen detrás de los códigos ya escritos, también en esta tanda
+                        following = max(following, int(head[2:]) + 1)
+                else:
+                    if following > 99:
+                        errors.append(f"Línea {number} ({line}): el bloque {supervisor} ya no tiene códigos libres "
+                                      "(llega a 99). Usa otro bloque para el resto.")
+                        continue
+                    code, name = f"{supervisor}{following:02d}", line
+                    following += 1
+                name = name[:80]
+                if code in found:
+                    errors.append(f"Línea {number} ({line}): el código {code} ya es de {found[code].get('name')}.")
+                    continue
+                found[code] = {"name": name, "supervisor": supervisor}
+                added.append((code, name))
+            if not errors:
+                document["students"] = dict(sorted(found.items()))
         self._write(change)
-        return created["id"]
+        if errors:
+            added.clear()
+        return added, errors
 
-    def set_participant(self, participant_id, name):
-        """Renombra o (con name vacío) quita un participante."""
+    def set_student(self, code, name=None, supervisor=None, retired=None):
+        """Cambia el nombre, el supervisor o si está retirado; lo que vaya en None no se toca."""
         def change(document):
-            found = [p for p in document.get("participants") or [] if isinstance(p, dict)]
+            found = document.get("students")
+            found = dict(found) if isinstance(found, dict) else {}
+            entry = dict(found.get(code) or {})
+            if not entry:
+                return
             if name:
-                for p in found:
-                    if p.get("id") == participant_id:
-                        p["name"] = name
-            else:
-                found = [p for p in found if p.get("id") != participant_id]
-            document["participants"] = found
+                entry["name"] = name[:80]
+            if supervisor:
+                entry["supervisor"] = supervisor
+            if retired is not None:
+                if retired:
+                    entry["retired"] = True
+                else:
+                    entry.pop("retired", None)
+            found[code] = entry
+            document["students"] = found
         self._write(change)
 
 

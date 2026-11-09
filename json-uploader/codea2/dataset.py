@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from . import sheet as ficha
-from .checks import check_run, cross_checks
+from .checks import check_run, cross_checks, roster_checks
 from .model import build_run
 
 _NO_START = datetime.max.replace(tzinfo=timezone.utc)
@@ -18,7 +18,7 @@ class Dataset:
     def runs(self):
         """Todas las sesiones legibles, de la más antigua a la más reciente."""
         state = self.store.state()
-        supervisors, participants = self.store.supervisors(), self.store.participants()
+        supervisors, students = self.store.supervisors(), self.store.students()
         built = {}
         runs = []
         for file in self.store.files():
@@ -33,12 +33,15 @@ class Dataset:
             entry = state.get(file.name) or {}
             runs.append(replace(cached[1], excluded=bool(entry.get("excluded")),
                                 note=str(entry.get("note") or ""),
-                                sheet=ficha.resolve(entry, cached[1].pin, supervisors, participants)))
+                                sheet=ficha.resolve(entry, cached[1].pin, supervisors, students)))
         self._built = built
 
+        runs.sort(key=lambda r: (r.started_at or _NO_START, r.file.name))
+        ficha.propose_moments(runs)
         extra = cross_checks(runs)
-        runs = [replace(r, issues=r.issues + tuple(extra[r.id])) if r.id in extra else r for r in runs]
-        return sorted(runs, key=lambda r: (r.started_at or _NO_START, r.file.name))
+        roster = roster_checks(runs, students)
+        return [replace(r, issues=r.issues + tuple(extra.get(r.id, ())) + tuple(roster.get(r.id, ())))
+                if r.id in extra or r.id in roster else r for r in runs]
 
     def get(self, run_id):
         return next((r for r in self.runs() if r.id == run_id), None)

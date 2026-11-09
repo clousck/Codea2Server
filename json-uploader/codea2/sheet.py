@@ -3,10 +3,13 @@
 La rellena el evaluador en el panel y se guarda junto a las sesiones excluidas y las notas.
 Los campos salen del documento de métricas del 19/10/2026 (secciones 7, 8.5 y 9.1).
 
-Participante y observador no se escriben: salen de las listas de la página Personas.
-- El código de participante es el PIN (0701).
-- El observador es el supervisor cuyo código son los dos primeros dígitos del PIN (07).
-- El participante se elige de la lista; su id es lo que une su sesión inicial y su final.
+Participante y supervisor no se escriben: salen del PIN y de las listas de la página Personas.
+- El código de participante es el PIN de 4 cifras, el mismo en su sesión inicial y en la final.
+  Si el visor recibió un PIN mal tecleado, la ficha lo corrige (pinFix) sin tocar el JSON.
+- La lista de estudiantes da su nombre y su supervisor. Los códigos se generan por bloques del
+  supervisor (07 → 0701, 0702…), pero el supervisor de un estudiante es el de la lista, no el
+  que digan las cifras: puede cambiar de supervisor sin cambiar de código.
+- Un PIN que no está en la lista toma como supervisor sus dos primeras cifras.
 
 Desde ese documento los pilares se valoran por actividad (perfiles E1P a E4P): cada escenario
 tiene sus dos criterios observables por dimensión y su pregunta de apoyo. La toma de decisiones
@@ -106,11 +109,18 @@ MATRIX = {
     },
 }
 
-# Lo que la ficha propone en una sesión que aún no se ha guardado
-DEFAULTS = {"moment": "final", "help": "ninguna", "closure": "completada"}
+# Lo que la ficha propone en una sesión que aún no se ha guardado. El momento se propone por
+# orden: la primera sesión de un código es la inicial y las siguientes, la final
+DEFAULTS = {"help": "ninguna", "closure": "completada"}
 
 _CHOICES = {"moment": MOMENTS, "help": HELP, "closure": CLOSURES}
-SESSION_FIELDS = ("participant", "participantId", "supervisor", "observer", "moment", "help", "closure")
+SESSION_FIELDS = ("participant", "pinCorrected", "supervisor", "supervisorName", "moment", "help", "closure")
+
+
+def valid_code(value):
+    """Un código de estudiante: el PIN de 4 cifras."""
+    value = str(value or "")
+    return len(value) == 4 and value.isdigit()
 
 
 def supervisor_code(pin):
@@ -119,30 +129,53 @@ def supervisor_code(pin):
     return pin[:2] if len(pin) >= 3 and pin[:2].isdigit() else ""
 
 
-def resolve(entry, pin, supervisors, participants):
+def resolve(entry, pin, supervisors, students):
     """La ficha guardada de una sesión, con lo que sale del PIN y de las listas.
 
-    participant es el PIN; supervisor y observer, el código y el nombre del supervisor;
-    participantName, el nombre del participante elegido. Si el supervisor no está en la lista,
-    vale el observador escrito a mano en las fichas antiguas, si lo hay.
+    - participant: el código del estudiante, el PIN corregido en la ficha o, si no, el del visor.
+    - participantName: su nombre en la lista (no se descarga: son datos de menores).
+    - supervisor / supervisorName: el de la lista de estudiantes o, si el código no está, el de
+      sus dos primeras cifras. Sin nombre en la lista de supervisores vale el observador escrito
+      a mano en las fichas antiguas, si lo hay.
     """
     resolved = dict(entry)
-    code = supervisor_code(pin)
-    resolved["participant"] = str(pin or "")
-    resolved["supervisor"] = code
-    resolved["observer"] = supervisors.get(code) or str(entry.get("observer") or "")
-    resolved["observerListed"] = code in supervisors
-    names = {str(p["id"]): p["name"] for p in participants}
-    chosen = str(entry.get("participantId") or "")
-    resolved["participantId"] = chosen
-    resolved["participantName"] = names.get(chosen, "")
+    pin = str(pin or "")
+    fixed = str(entry.get("pinFix") or "")
+    code = fixed if valid_code(fixed) else pin
+    student = students.get(code)
+    supervisor = student["supervisor"] if student else supervisor_code(code)
+    resolved.update(
+        participant=code,
+        visorPin=pin,
+        pinCorrected=valid_code(fixed) and fixed != pin,
+        participantName=student["name"] if student else "",
+        listed=student is not None,
+        retired=bool(student and student.get("retired")),
+        supervisor=supervisor,
+        supervisorName=supervisors.get(supervisor) or str(entry.get("observer") or ""),
+        supervisorListed=supervisor in supervisors,
+        proposedMoment="final",
+    )
     return resolved
 
 
+def propose_moments(runs):
+    """Primera sesión de cada código → inicial; las siguientes → final. Las excluidas no cuentan."""
+    seen = set()
+    for run in runs:  # ya ordenadas por inicio
+        code = run.sheet.get("participant")
+        if run.excluded or not code:
+            continue
+        run.sheet["proposedMoment"] = "final" if code in seen else "inicial"
+        seen.add(code)
+
+
 def value(sheet, key):
-    """Lo guardado, o lo que se propone por defecto si la ficha no se ha guardado nunca."""
+    """Lo guardado, o lo que se propone si la ficha no se ha guardado nunca."""
     if sheet.get("saved"):
         return sheet.get(key, "")
+    if key == "moment":
+        return sheet.get(key) or sheet.get("proposedMoment", "final")
     return sheet.get(key) or DEFAULTS.get(key, "")
 
 
@@ -154,12 +187,14 @@ def evidence(scenario, pillar, number):
     return f"e{scenario}_{pillar}_{number}_ev"
 
 
-def from_form(form, participant_ids=()):
-    """Los campos de la ficha que trae un formulario. Lo que no viene queda en None: no se toca."""
+def from_form(form):
+    """Los campos de la ficha que trae un formulario. Lo que no viene queda en None: no se toca.
+
+    Un PIN corregido que no tiene 4 cifras no se guarda: el servidor avisa antes.
+    """
     fields = {}
-    if "participantId" in form:
-        chosen = form["participantId"].strip()
-        fields["participantId"] = chosen if chosen in {str(i) for i in participant_ids} else ""
+    if "pinFix" in form and (valid_code(form["pinFix"].strip()) or not form["pinFix"].strip()):
+        fields["pinFix"] = form["pinFix"].strip()
     if any(key in form for key in _CHOICES):
         fields["saved"] = "1"  # desde aquí la ficha vale lo guardado, no lo propuesto por defecto
     for key, choices in _CHOICES.items():

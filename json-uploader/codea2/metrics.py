@@ -489,10 +489,11 @@ def analysis_table(runs):
 
     columns = (
         *KEYS,
-        Column("participant", "text", "Código de participante: el PIN"),
-        Column("participantId", "text", "Número del participante en la lista de Personas, de la ficha"),
-        Column("supervisor", "text", "Código del supervisor: los dos primeros dígitos del PIN"),
-        Column("observer", "text", "Nombre del supervisor en la lista de Personas"),
+        Column("participant", "text", "Código del estudiante: el PIN, o el corregido en la ficha si el visor "
+                                      "recibió uno mal tecleado. Une su sesión inicial y su final"),
+        Column("pinCorrected", "flag", "1 si el PIN se corrigió en la ficha: la columna pin es el que mandó el visor"),
+        Column("supervisor", "text", "Código del supervisor del estudiante, de la lista de Personas"),
+        Column("supervisorName", "text", "Nombre del supervisor, de la lista de Personas"),
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
         Column("closure", "text", "Motivo de cierre, de la ficha"),
@@ -585,10 +586,11 @@ def pillars_table(runs):
 
     columns = (
         *KEYS,
-        Column("participant", "text", "Código de participante: el PIN"),
-        Column("participantId", "text", "Número del participante en la lista de Personas, de la ficha"),
-        Column("supervisor", "text", "Código del supervisor: los dos primeros dígitos del PIN"),
-        Column("observer", "text", "Nombre del supervisor en la lista de Personas"),
+        Column("participant", "text", "Código del estudiante: el PIN, o el corregido en la ficha si el visor "
+                                      "recibió uno mal tecleado. Une su sesión inicial y su final"),
+        Column("pinCorrected", "flag", "1 si el PIN se corrigió en la ficha: la columna pin es el que mandó el visor"),
+        Column("supervisor", "text", "Código del supervisor del estudiante, de la lista de Personas"),
+        Column("supervisorName", "text", "Nombre del supervisor, de la lista de Personas"),
         Column("moment", "text", "Momento de evaluación (inicial o final), de la ficha"),
         Column("help", "text", "Ayuda recibida, de la ficha"),
         Column("scenario", "int", "Número de escenario (1 a 4)"),

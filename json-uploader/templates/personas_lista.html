@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Lista de estudiantes · CODEA 2</title>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; color: #111; margin: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 24px 0 6px; }
+    p { color: #555; margin: 0 0 12px; }
+    table { border-collapse: collapse; width: 100%; max-width: 760px; }
+    th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; }
+    th { background: #eee; }
+    td.code { font: 600 16px/1 ui-monospace, monospace; width: 80px; }
+    td.check { width: 70px; }
+    section { break-inside: avoid; }
+    section + section { break-before: page; }
+    @media print { .no-print { display: none; } body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <p class="no-print"><button onclick="window.print()">Imprimir</button> · Cada supervisor sale en su propia hoja.</p>
+  <h1>CODEA 2 · Lista de estudiantes</h1>
+  <p>El código es el PIN que se teclea en el visor, el mismo en la sesión inicial y en la final.</p>
+  {% for supervisor, students in groups.items() %}
+  <section>
+    <h2>Supervisor {{ supervisor }}{% if supervisors.get(supervisor) %} · {{ supervisors[supervisor] }}{% endif %}</h2>
+    <table>
+      <thead><tr><th>Código (PIN)</th><th>Nombre</th><th>Inicial</th><th>Final</th></tr></thead>
+      <tbody>
+        {% for code, name in students %}
+        <tr><td class="code">{{ code }}</td><td>{{ name }}</td><td class="check"></td><td class="check"></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% else %}
+  <p>No hay estudiantes activos.</p>
+  {% endfor %}
+</body>
+</html>

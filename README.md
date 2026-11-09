@@ -380,7 +380,7 @@ sirve para subir y no para leer.
 | **Detalle de una sesión** | Sus métricas, línea de tiempo, cada intento (con su cercanía a la solución), selección, prueba y colocación con su hora, avisos de integridad, **ficha de sesión** y JSON original |
 | **Datos** | Las tablas, con vista previa, diccionario de columnas y descarga |
 | **Archivos** | Lo que hay en `uploads/` y su estado. Subida a mano de los JSON sacados del visor por cable |
-| **Personas** | Las listas de supervisores (código de dos cifras y nombre) y de participantes (nombre, con un número que se asigna solo). Solo con la sesión iniciada, también con el panel público |
+| **Personas** | Supervisores y la lista de estudiantes: el PIN es el código del estudiante. Alta de varios a la vez, lista para imprimir y PIN de sesiones que no están en la lista. Solo con la sesión iniciada, también con el panel público |
 | **Exploración** | Lo que no es métrica del estudio pero ayuda a preparar preguntas: tiempos sesión a sesión, secuencias probadas, cercanía a la solución intento a intento, qué opción se marcó y cuántas pruebas hizo falta en cada módulo, ajuste del bucle, qué ficha se puso en cada hueco |
 
 Los filtros de arriba (fechas, dificultad, PIN) valen para todo lo que hay debajo **y para las
@@ -432,28 +432,52 @@ Siguen el documento «Métricas por escenario de CODEA2» (19/10/2026). Las regl
   evaluados; con un NO queda NC. Las dimensiones no se suman en una nota global. La toma de
   decisiones sustituye a la abstracción.
 
+### Estudiantes y supervisores
+
+El **PIN de 4 cifras que se teclea en el visor es el código del estudiante**, el mismo en su
+sesión inicial y en la final. La identidad no está en las cifras sino en la **lista de
+estudiantes** de la página *Personas* (código, nombre, supervisor), que es la referencia:
+
+- **Supervisores:** código de dos cifras y nombre. Un supervisor con estudiantes no se puede
+  quitar; antes hay que pasarlos a otro.
+- **Alta de estudiantes:** se elige el supervisor y se pegan los nombres, uno por línea. Cada uno
+  recibe el siguiente código libre del bloque del supervisor (07 → 0701, 0702…), siempre detrás
+  del más alto ya dado. Para respetar una lista ya numerada se pone el código delante
+  (`0701 Ana Pérez`). Si una línea falla (código ocupado, bloque lleno) no se añade ninguna.
+- **Los códigos no se reutilizan.** Un estudiante que se va se marca como *retirado*: deja de salir
+  en la lista impresa, pero su código no se le da a nadie más.
+- **El supervisor de un estudiante es el de la lista**, no el de sus cifras: si cambia de
+  supervisor se cambia ahí y conserva su código. Un supervisor con más de 99 estudiantes usa otro
+  bloque (sus códigos empiezan por otras dos cifras). Un PIN que no está en la lista toma como
+  supervisor sus dos primeras cifras.
+- **Lista para imprimir** (una hoja por supervisor, con casillas *Inicial* y *Final*) y descarga
+  en CSV, sacadas de la misma lista: lo impreso y lo del panel no pueden diferir.
+- **Los nombres de los estudiantes son datos de menores:** solo se ven en *Personas* y en la ficha,
+  con la sesión iniciada (también con el panel público). Las tablas de datos llevan el código.
+- Las listas se guardan en `uploads/.codea2-panel.json`, junto a las fichas: entran en la copia
+  de seguridad (*Archivos → Descargar todos*) y en una migración a otro servidor.
+
 ### La ficha de sesión
 
 Lo que el estudio necesita y el visor no sabe. Se rellena en la página de cada sesión: el
-participante, el momento (inicial o final), la ayuda recibida, el motivo de cierre y, por cada
-escenario, los dos criterios de cada dimensión (1, 0 o NO) con su evidencia,
-según las matrices del documento. Se guarda en `uploads/.codea2-panel.json`, junto con las listas
-de *Personas*, y sale en las tablas `sesiones`, `analisis` y `pilares`.
+momento (inicial o final), la ayuda recibida, el motivo de cierre y, por cada escenario, los dos
+criterios de cada dimensión (1, 0 o NO) con su evidencia, según las matrices del documento. Se
+guarda en `uploads/.codea2-panel.json` y sale en las tablas `sesiones`, `analisis` y `pilares`.
 
-- **Nada se escribe a mano.** Con el PIN `0701`, el código de participante es el propio PIN y el
-  observador es el supervisor `07`, cuyo nombre sale de la lista de *Personas*. Si ese código no
-  está en la lista, la ficha ofrece añadirlo.
-- **El participante se elige de su lista.** Su número (`participantId`) es lo que une su sesión
-  inicial y su final. En las descargas va ese número, nunca el nombre: son datos de menores. Un
-  participante elegido en alguna ficha no se puede quitar de la lista, solo renombrar.
-- **Valores propuestos:** una ficha sin guardar propone *Final*, *Sin ayuda* y *Completó la
-  sesión*, pero no cuentan hasta que se pulsa **Guardar la ficha**. El motivo de cierre decide los
-  casos dudosos de MC1, así que una sesión que nadie ha revisado no se da por completada. Una vez
-  guardada, la ficha muestra lo guardado aunque sea *Sin indicar*.
-- Las fichas anteriores con participante u observador escritos a mano conservan ese texto, pero
-  ya no se usa: vale el PIN y, si el supervisor no está en la lista, el observador escrito. Las valoraciones de la ficha anterior (una por sesión, con
-abstracción) siguen guardadas pero no se usan: no se atribuyen a una actividad ni se convierten en
-toma de decisiones.
+- **Estudiante y supervisor no se escriben:** salen del PIN y de la lista. Si el estudiante o su
+  supervisor no están en la lista, la ficha ofrece añadirlos.
+- **Corregir el PIN:** si en el visor se tecleó mal, se escribe el correcto en la ficha. El JSON no
+  se toca: la columna `pin` sigue siendo el del visor, `participant` es el corregido y
+  `pinCorrected` vale 1. El filtro por PIN encuentra la sesión por los dos.
+- **Valores propuestos:** una ficha sin guardar propone *Sin ayuda* y *Completó la sesión*, y el
+  momento por orden: la primera sesión de un código, *Inicial*; las siguientes, *Final*. No cuentan
+  hasta que se pulsa **Guardar la ficha**: el motivo de cierre decide los casos dudosos de MC1, así
+  que una sesión que nadie ha revisado no se da por completada. Una vez guardada, la ficha muestra
+  lo guardado aunque sea *Sin indicar*.
+- Las fichas anteriores con observador escrito a mano lo conservan y se usa solo si el supervisor
+  no está en la lista. Las valoraciones de la ficha anterior (una por sesión, con abstracción)
+  siguen guardadas pero no se usan: no se atribuyen a una actividad ni se convierten en toma de
+  decisiones.
 
 **Excluir no borra.** Una sesión excluida (una prueba interna, un duplicado) sigue en
 `uploads/`, pero deja de contar en el resumen, en los escenarios y en las descargas.
@@ -515,6 +539,8 @@ mal capturado, sesión por sesión. Son avisos, no errores: un cero puede ser le
 | `nombre_distinto` | El archivo no se llama `{pin}_{sessionId}_{deviceId}.json` (o `{pin}_{sessionId}.json` en el formato anterior) |
 | `duplicada` | Otro archivo trae la misma sesión: cuenta doble mientras no se excluya una |
 | `pin_repetido` | Mismo PIN, contador y visor que otro archivo, pero otra hora de inicio |
+| `pin_desconocido` | El código no está en la lista de estudiantes: ¿PIN mal tecleado en el visor? Se corrige en la ficha. Solo salta cuando ya hay lista |
+| `pin_doble` | El mismo código tiene dos sesiones con el mismo momento: ¿el mismo estudiante dos veces o dos con el mismo PIN? Las excluidas no cuentan |
 | `sin_cierre` | La run no se cerró (`endedUtc` vacío) |
 | `evento_antes` | Un evento anterior al inicio de su escenario: el reto se abrió tarde y `totalSeconds` se queda corto |
 | `pausa` | El reloj del escenario supera a `totalSeconds` en más de 2 s: el visor estuvo en pausa. Solo informa: el tiempo sigue valiendo para MC2 |

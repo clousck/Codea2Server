@@ -6,14 +6,30 @@
 <div class="page-head">
   <div>
     <h1>Personas</h1>
-    <p class="sub">Las listas de la ficha de sesión. Con el PIN <code>0701</code>, el supervisor es el <code>07</code> y el código de participante es el propio PIN: el observador de la ficha se pone solo. El participante se elige de su lista, y su número une su sesión inicial y su final.</p>
+    <p class="sub">El PIN que se teclea en el visor es el <strong>código del estudiante</strong> (4 cifras), el mismo en su sesión inicial y en la final. Con él, la ficha de cada sesión pone sola el nombre del estudiante y su supervisor. Los códigos se dan por bloques del supervisor (07 → 0701, 0702…) y no se reutilizan nunca.</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('personas_lista', supervisor=chosen) }}" target="_blank">Lista para imprimir</a>
+    <a class="btn" href="{{ url_for('personas_csv') }}">Descargar (.csv)</a>
   </div>
 </div>
 
 <div class="stack">
+  {% if unknown %}
+  <div class="notice error" role="status">
+    {{ unknown|length }} {{ 'sesión tiene' if unknown|length == 1 else 'sesiones tienen' }} un PIN que no está en la lista. Si se tecleó mal en el visor, corrígelo en su ficha; si es un estudiante nuevo, añádelo aquí abajo:
+    {% for run in unknown %}<a href="{{ url_for('sesion', run_id=run.id) }}#ficha"><code>{{ run.sheet.participant }}</code></a>{{ ', ' if not loop.last }}{% endfor %}.
+  </div>
+  {% endif %}
+  {% if missing %}
+  <div class="notice error" role="status">
+    Hay estudiantes con un supervisor que no está en la lista: {% for code in missing %}<a href="{{ url_for('personas', codigo=code) }}"><code>{{ code }}</code></a>{{ ', ' if not loop.last }}{% endfor %}.
+  </div>
+  {% endif %}
+
   <section class="card">
     <h3>Supervisores</h3>
-    <p class="sub">El código son las dos primeras cifras del PIN. Para cambiar un nombre, vuelve a añadir el mismo código con el nombre nuevo.</p>
+    <p class="sub">El código son dos cifras: las dos primeras de los códigos de sus estudiantes. Para cambiar un nombre, vuelve a añadir el mismo código con el nombre nuevo.</p>
     <form class="card-body ficha-row" method="post" action="{{ url_for('personas_supervisor') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <label>Código
@@ -25,22 +41,15 @@
       <div style="align-self: end"><button class="btn primary" type="submit">Añadir supervisor</button></div>
     </form>
 
-    {% if missing %}
-    <div class="notice info" role="status">
-      Hay sesiones con PIN de supervisores que aún no están en la lista:
-      {% for code in missing %}<a href="{{ url_for('personas', codigo=code) }}"><code>{{ code }}</code></a> ({{ by_supervisor[code] }}){{ ', ' if not loop.last }}{% endfor %}.
-    </div>
-    {% endif %}
-
     {% if supervisors %}
     <div class="table-wrap">
       <table class="data" data-sortable>
-        <thead><tr><th><button class="sort" type="button">Código</button></th><th><button class="sort" type="button">Nombre</button></th><th class="n"><button class="sort" type="button">Sesiones</button></th><th></th></tr></thead>
+        <thead><tr><th><button class="sort" type="button">Código</button></th><th><button class="sort" type="button">Nombre</button></th><th class="n"><button class="sort" type="button">Estudiantes</button></th><th></th></tr></thead>
         <tbody>
           {% for code, name in supervisors.items() %}
           <tr>
             <td><code>{{ code }}</code></td>
-            <td>{{ name }}</td>
+            <td><a href="{{ url_for('personas', supervisor=code) }}#estudiantes">{{ name }}</a></td>
             <td class="n">{{ by_supervisor.get(code, 0) }}</td>
             <td class="n">
               <form method="post" action="{{ url_for('personas_supervisor_quitar', code=code) }}" onsubmit="return confirm('¿Quitar al supervisor {{ code }} de la lista?')">
@@ -54,42 +63,65 @@
       </table>
     </div>
     {% else %}
-    <div class="empty">Aún no hay supervisores.</div>
+    <div class="empty">Aún no hay supervisores. Añade al menos uno para poder dar de alta estudiantes.</div>
     {% endif %}
   </section>
 
-  <section class="card">
-    <h3>Participantes</h3>
-    <p class="sub">Cada uno recibe el siguiente número, que no se reutiliza aunque se quite a alguien. Los nombres solo se ven con la sesión iniciada y no salen en las descargas: las tablas llevan el número (<code>participantId</code>).</p>
-    <form class="card-body ficha-row" method="post" action="{{ url_for('personas_participante') }}">
+  <section class="card" id="estudiantes">
+    <h3>Estudiantes</h3>
+    <p class="sub">Un nombre por línea: cada uno recibe el siguiente código libre del bloque del supervisor. Para respetar una lista ya numerada, pon el código delante: <code>0701 Ana Pérez</code>. Si alguna línea falla no se añade ninguna, para no dejar la lista a medias. Los nombres solo se ven aquí y en la ficha, con la sesión iniciada; las descargas de datos llevan solo el código.</p>
+    {% if supervisors %}
+    <form class="card-body ficha" method="post" action="{{ url_for('personas_estudiantes') }}">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-      <label>Nombre
-        <input type="text" name="name" maxlength="80" required placeholder="Nombre y apellido">
+      <div class="ficha-row">
+        <label>Supervisor
+          <select name="supervisor" required>
+            {% for code, name in supervisors.items() %}<option value="{{ code }}"{% if code == chosen %} selected{% endif %}>{{ code }} · {{ name }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <label class="sub" style="display: grid; gap: 4px">Nombres, uno por línea
+        <textarea name="names" rows="6" required placeholder="Ana Pérez&#10;Luis Torres&#10;0712 Eva Mora"></textarea>
       </label>
-      <div style="align-self: end"><button class="btn primary" type="submit">Añadir participante</button></div>
+      <div><button class="btn primary" type="submit">Añadir estudiantes</button></div>
     </form>
+    {% endif %}
 
-    {% if participants %}
+    {% if all_students %}
+    <div class="btn-row" style="margin: 8px 0">
+      <a class="btn{% if not chosen %} primary{% endif %}" href="{{ url_for('personas') }}#estudiantes">Todos ({{ all_students|length }})</a>
+      {% for code, name in supervisors.items() %}<a class="btn{% if chosen == code %} primary{% endif %}" href="{{ url_for('personas', supervisor=code) }}#estudiantes">{{ code }} · {{ name }}</a>{% endfor %}
+    </div>
     <div class="table-wrap">
       <table class="data" data-sortable>
-        <thead><tr><th class="n"><button class="sort" type="button">N.º</button></th><th><button class="sort" type="button">Nombre</button></th><th class="n"><button class="sort" type="button">Fichas</button></th><th></th></tr></thead>
+        <thead><tr><th><button class="sort" type="button">Código</button></th><th><button class="sort" type="button">Nombre y supervisor</button></th><th><button class="sort" type="button">Sesiones</button></th><th></th></tr></thead>
         <tbody>
-          {% for p in participants %}
-          <tr>
-            <td class="n" data-v="{{ p.id }}">{{ p.id }}</td>
+          {% for code, student in students.items() %}
+          {% set sessions = sessions_of.get(code, []) %}
+          <tr{% if student.retired %} class="sub"{% endif %}>
+            <td><code>{{ code }}</code>{% if student.retired %} <span class="tag">Retirado</span>{% endif %}</td>
             <td>
-              <form class="btn-row" method="post" action="{{ url_for('personas_participante_cambiar', participant_id=p.id) }}">
+              <form class="btn-row" method="post" action="{{ url_for('personas_estudiante', code=code) }}">
                 <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-                <input type="text" name="name" value="{{ p.name }}" maxlength="80" required aria-label="Nombre del participante {{ p.id }}">
-                <button class="btn ghost" type="submit">Renombrar</button>
+                <input type="hidden" name="back" value="{{ chosen }}">
+                <input type="text" name="name" value="{{ student.name }}" maxlength="80" required aria-label="Nombre del estudiante {{ code }}">
+                <select name="supervisor" aria-label="Supervisor del estudiante {{ code }}">
+                  {% for scode, sname in supervisors.items() %}<option value="{{ scode }}"{% if scode == student.supervisor %} selected{% endif %}>{{ scode }} · {{ sname }}</option>{% endfor %}
+                  {% if student.supervisor not in supervisors %}<option value="{{ student.supervisor }}" selected>{{ student.supervisor }} · sin nombre</option>{% endif %}
+                </select>
+                <button class="btn ghost" type="submit">Guardar</button>
               </form>
             </td>
-            <td class="n">{{ by_participant.get(p.id|string, 0) }}</td>
+            <td data-v="{{ sessions|length }}">
+              {% for run in sessions %}<a href="{{ url_for('sesion', run_id=run.id) }}">{{ sheet.MOMENTS.get(sheet.value(run.sheet, 'moment'), 'sin momento') }}{% if not run.sheet.saved %}*{% endif %}</a>{{ ' · ' if not loop.last }}{% else %}<span class="sub">—</span>{% endfor %}
+              {% if sessions and sessions|selectattr('sheet.saved', 'undefined')|list %}<div class="sub">* propuesto, falta guardar la ficha</div>{% endif %}
+            </td>
             <td class="n">
-              <form method="post" action="{{ url_for('personas_participante_cambiar', participant_id=p.id) }}" onsubmit="return confirm('¿Quitar al participante {{ p.id }} de la lista?')">
+              <form method="post" action="{{ url_for('personas_estudiante', code=code) }}">
                 <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-                <input type="hidden" name="action" value="quitar">
-                <button class="btn ghost" type="submit">Quitar</button>
+                <input type="hidden" name="back" value="{{ chosen }}">
+                <input type="hidden" name="action" value="{{ 'reactivar' if student.retired else 'retirar' }}">
+                <button class="btn ghost" type="submit" title="{{ 'Vuelve a contar como estudiante activo' if student.retired else 'Deja de salir en la lista impresa; su código no se da a nadie más' }}">{{ 'Reactivar' if student.retired else 'Retirar' }}</button>
               </form>
             </td>
           </tr>
@@ -98,7 +130,7 @@
       </table>
     </div>
     {% else %}
-    <div class="empty">Aún no hay participantes.</div>
+    <div class="empty">Aún no hay estudiantes.</div>
     {% endif %}
   </section>
 </div>
